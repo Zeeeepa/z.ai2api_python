@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  openai-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openai-multi-provider-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount configuration files
+      - ./config:/app/config:ro
+      # Mount sessions directory for persistence
+      - ./sessions:/app/.sessions
+      # Optional: Mount custom .env file
+      - ./.env:/app/.env:ro
+    environment:
+      # Override with your settings
+      - AUTH_TOKEN=${AUTH_TOKEN:-sk-default-api-key}
+      - SKIP_AUTH_TOKEN=${SKIP_AUTH_TOKEN:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HOST=0.0.0.0
+      - PORT=8080
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/models')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - openai-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  openai-network:
+    driver: bridge
+

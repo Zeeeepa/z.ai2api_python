@@ -1,105 +1,48 @@
-# Git相关
+# Git
 .git
 .gitignore
 .gitattributes
 
-# Python相关
-__pycache__/
+# Python
+__pycache__
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-tests/
-docs/
-
-# 虚拟环境
-venv/
 env/
+venv/
 ENV/
-env.bak/
-venv.bak/
+.venv
 
-# IDE相关
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# 操作系统相关
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Sessions and config (mount as volumes instead)
+.sessions/
+.env
+config/providers.json
 
-# 日志文件
-*.log
-logs/
-
-# 测试相关
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-
-# 文档
+# Documentation
 docs/
 *.md
-README*
+!README.md
 
-# 备份文件
-backup/
-*.bak
-*.backup
+# Misc
+.DS_Store
+Thumbs.db
 
-# 临时文件
-tmp/
-temp/
-*.tmp
-
-# 配置文件（可能包含敏感信息）
-.env
-.env.local
-.env.*.local
-tokens.txt
-!tokens.txt.example
-
-# Docker相关
-Dockerfile*
-docker-compose*.yml
-.dockerignore
-
-# CI/CD相关
-.github/
-.gitlab-ci.yml
-.travis.yml
-Jenkinsfile
-
-# 部署相关
-deploy/
-k8s/
-helm/

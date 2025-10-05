@@ -1,438 +1,547 @@
-# OpenAI API 代理服务
+# OpenAI-Compatible Multi-Provider API Server
 
-![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Python: 3.9-3.12](https://img.shields.io/badge/python-3.9--3.12-green.svg)
-![FastAPI](https://img.shields.io/badge/framework-FastAPI-009688.svg)
+> A unified OpenAI-compatible API server that aggregates multiple AI chat providers (Z.AI, K2Think, Qwen, LongCat) with automatic authentication, session management, and intelligent request routing.
 
-基于 FastAPI 的高性能 OpenAI API 兼容代理服务，采用多提供商架构设计，支持 GLM-4.5 系列、K2Think、LongCat 等多种 AI 模型的完整功能。
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## ✨ 核心特性
+## 🌟 Features
 
-- 🔌 **完全兼容 OpenAI API** - 无缝集成现有应用
-- 🏗️ **多提供商架构** - 支持 Z.AI、K2Think、LongCat 等多个 AI 提供商
-- 🤖 **Claude Code 支持** - 通过 Claude Code Router 接入 Claude Code (**CCR 工具请升级到 v1.0.47 以上**)
-- 🍒 **Cherry Studio支持** - Cherry Studio 中可以直接调用 MCP 工具
-- 🚀 **高性能流式响应** - Server-Sent Events (SSE) 支持
-- 🛠️ **增强工具调用** - 改进的 Function Call 实现，支持复杂工具链
-- 🧠 **思考模式支持** - 智能处理模型推理过程
-- 🐳 **Docker 部署** - 一键容器化部署(环境变量请参考`.env.example`)
-- 🛡️ **会话隔离** - 匿名模式保护隐私
-- 🔧 **灵活配置** - 环境变量灵活配置
-- 🔄 **Token 池管理** - 自动轮询、容错恢复、动态更新
-- 🛡️ **错误处理** - 完善的异常捕获和重试机制
+- **🔌 OpenAI-Compatible API** - Drop-in replacement for OpenAI API
+- **🎯 Multi-Provider Support** - Unified access to 4+ AI providers
+- **🔐 Automatic Authentication** - Manages sessions and cookies automatically
+- **🔄 Intelligent Routing** - Routes requests to appropriate provider by model name
+- **💾 Session Encryption** - Secure storage of authentication sessions
+- **📡 Streaming Support** - Real-time streaming responses
+- **🛡️ Error Handling** - Automatic retry and fallback mechanisms
+- **📊 Model Discovery** - Lists all available models from all providers
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 环境要求
+### Prerequisites
 
-- Python 3.9-3.12
-- pip 或 uv (推荐)
+- Python 3.8 or higher
+- pip or uv package manager
 
-### 安装运行
+### Installation
 
 ```bash
-# 克隆项目
-git clone https://github.com/ZyphrZero/z.ai2api_python.git
+# Clone the repository
+git clone https://github.com/Zeeeepa/z.ai2api_python.git
 cd z.ai2api_python
 
-# 使用 uv (推荐)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync
-uv run python main.py
+# Install dependencies
+pip install -r requirements.txt
+# or with uv
+uv pip install -r requirements.txt
 
-# 或使用 pip (推荐使用清华源)
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-python main.py
+# Create configuration
+cp .env.example .env
+cp config/providers.json.example config/providers.json
+
+# Edit configuration with your credentials
+nano .env
+nano config/providers.json
 ```
 
-> 🍋‍🟩 服务启动后访问接口文档：http://localhost:8080/docs  
-> 💡 **提示**：默认端口为 8080，可通过环境变量 `LISTEN_PORT` 修改  
-> ⚠️ **注意**：请勿将 `AUTH_TOKEN` 泄露给其他人，请使用 `AUTH_TOKENS` 配置多个认证令牌  
+### Configuration
 
-### 基础使用
-
-服务启动后，可以通过标准的 OpenAI API 客户端进行调用。详细的 API 使用方法请参考 [OpenAI API 文档](https://platform.openai.com/docs/api-reference)。
-
-### Docker 部署
-
-#### 方式一：使用预构建镜像（推荐）
-
-从 Docker Hub 拉取最新镜像：
+#### 1. API Authentication (`.env`)
 
 ```bash
-# 拉取最新版本
-docker pull zyphrzero/z-ai2api-python:latest
+# Single API key
+AUTH_TOKEN=sk-your-secret-api-key
 
-# 或拉取指定版本
-docker pull zyphrzero/z-ai2api-python:v0.1.0
-```
+# Or skip auth for development (NOT recommended for production)
+SKIP_AUTH_TOKEN=true
 
-**快速启动**：
-
-```bash
-# 基础启动（使用默认配置）
-docker run -d \
-  --name z-ai2api \
-  -p 8080:8080 \
-  -e AUTH_TOKEN="sk-your-api-key" \
-  zyphrzero/z-ai2api-python:latest
-
-# 完整配置启动
-docker run -d \
-  --name z-ai2api \
-  -p 8080:8080 \
-  -e AUTH_TOKEN="sk-your-api-key" \
-  -e ANONYMOUS_MODE="true" \
-  -e DEBUG_LOGGING="true" \
-  -e TOOL_SUPPORT="true" \
-  -v $(pwd)/tokens.txt:/app/tokens.txt \
-  -v $(pwd)/logs:/app/logs \
-  zyphrzero/z-ai2api-python:latest
-```
-
-**使用 Docker Compose**：
-
-创建 `docker-compose.yml` 文件：
-
-```yaml
-version: '3.8'
-
-services:
-  z-ai2api:
-    image: zyphrzero/z-ai2api-python:latest
-    container_name: z-ai2api
-    ports:
-      - "8080:8080"
-    environment:
-      - AUTH_TOKEN=sk-your-api-key
-      - ANONYMOUS_MODE=true
-      - DEBUG_LOGGING=true
-      - TOOL_SUPPORT=true
-      - LISTEN_PORT=8080
-    volumes:
-      - ./tokens.txt:/app/tokens.txt
-      - ./logs:/app/logs
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-```
-
-然后启动：
-
-```bash
-docker-compose up -d
-```
-
-#### 方式二：本地构建
-
-```bash
-cd deploy
-docker-compose up -d
-```
-
-#### Docker 镜像信息
-
-- **镜像地址**: [https://hub.docker.com/r/zyphrzero/z-ai2api-python](https://hub.docker.com/r/zyphrzero/z-ai2api-python)
-- **支持架构**: `linux/amd64`, `linux/arm64`
-- **基础镜像**: `python:3.11-slim`
-
-#### 数据持久化
-
-为了保持日志和配置文件的持久化，建议挂载以下目录：
-
-```bash
-# 启动时挂载数据目录
-docker run -d \
-  --name z-ai2api \
-  -p 8080:8080 \
-  -e AUTH_TOKEN="sk-your-api-key" \
-  -v $(pwd)/tokens.txt:/app/tokens.txt \
-  -v $(pwd)/logs:/app/logs \
-  -v $(pwd)/.env:/app/.env \
-  zyphrzero/z-ai2api-python:latest
-```
-
-## 📖 详细指南
-
-### 支持的模型
-
-#### Z.AI 提供商
-| 模型               | 上游 ID       | 描述        | 特性                   |
-| ------------------ | ------------- | ----------- | ---------------------- |
-| `GLM-4.5`          | 0727-360B-API | 标准模型    | 通用对话，平衡性能     |
-| `GLM-4.5-Thinking` | 0727-360B-API | 思考模型    | 显示推理过程，透明度高 |
-| `GLM-4.5-Search`   | 0727-360B-API | 搜索模型    | 实时网络搜索，信息更新 |
-| `GLM-4.5-Air`      | 0727-106B-API | 轻量模型    | 快速响应，高效推理     |
-
-#### K2Think 提供商
-| 模型                    | 描述           | 特性                     |
-| ----------------------- | -------------- | ------------------------ |
-| `MBZUAI-IFM/K2-Think`   | K2Think 模型   | 快速的高质量推理 |
-
-#### LongCat 提供商
-| 模型               | 描述           | 特性                     |
-| ------------------ | -------------- | ------------------------ |
-| `LongCat-Flash`    | 快速响应模型   | 高速处理，适合实时对话   |
-| `LongCat`          | 标准模型       | 平衡性能，通用场景       |
-| `LongCat-Search`   | 搜索增强模型   | 集成搜索功能，信息检索   |
-
-## ⚙️ 配置说明
-
-### 环境变量配置
-
-#### 基础配置
-| 变量名                | 默认值                                    | 说明                   |
-| --------------------- | ----------------------------------------- | ---------------------- |
-| `AUTH_TOKEN`          | `sk-your-api-key`                         | 客户端认证密钥         |
-| `LISTEN_PORT`         | `8080`                                    | 服务监听端口           |
-| `DEBUG_LOGGING`       | `true`                                    | 调试日志开关           |
-| `ANONYMOUS_MODE`      | `true`                                    | 匿名用户模式开关           |
-| `TOOL_SUPPORT`        | `true`                                    | Function Call 功能开关 |
-| `SKIP_AUTH_TOKEN`     | `false`                                   | 跳过认证令牌验证       |
-| `SCAN_LIMIT`          | `200000`                                  | 扫描限制               |
-| `AUTH_TOKENS_FILE`    | `tokens.txt`                              | Z.AI 认证token文件路径 |
-
-#### 提供商配置
-| 变量名                    | 默认值    | 说明                        |
-| ------------------------- | --------- | --------------------------- |
-| `LONGCAT_PASSPORT_TOKEN`  | -         | LongCat 单个认证token       |
-| `LONGCAT_TOKENS_FILE`     | -         | LongCat 多个token文件路径   |
-
-> 💡 详细配置请查看 `.env.example` 文件
-
-## 🏗️ 多提供商架构
-
-### Z.AI 提供商
-```bash
-# Z.AI 认证配置
+# Optional: Multiple API keys
 AUTH_TOKENS_FILE=tokens.txt
-ANONYMOUS_MODE=true
+
+# LongCat provider token
+LONGCAT_PASSPORT_TOKEN=your-longcat-token
 ```
 
-### LongCat 提供商
-
-```bash
-# LongCat 认证配置
-LONGCAT_PASSPORT_TOKEN=your_passport_token
-# 或使用多个token文件
-LONGCAT_TOKENS_FILE=longcat_tokens.txt
-```
-
-### K2Think 提供商
-```bash
-# K2Think 自动处理认证，无需额外配置
-```
-
-## 🔄 Token池机制
-
-### 功能特性
-
-- **负载均衡**：轮询使用多个auth token，分散请求负载
-- **自动容错**：token失败时自动切换到下一个可用token
-- **健康监控**：基于Z.AI API的role字段精确验证token类型
-- **自动恢复**：失败token在超时后自动重新尝试
-- **动态管理**：支持运行时更新token池
-- **智能去重**：自动检测和去除重复token
-- **类型验证**：只接受认证用户token (role: "user")，拒绝匿名token (role: "guest")
-- **回退机制**：认证模式失败时自动回退到匿名模式，*匿名模式无法回退到认证模式*
-
-## 监控API
-
-> 仅有基础功能，暂未完善
-
-```bash
-# 查看token池状态
-curl http://localhost:8080/v1/token-pool/status
-
-# 手动健康检查
-curl -X POST http://localhost:8080/v1/token-pool/health-check
-
-# 动态更新token池
-curl -X POST http://localhost:8080/v1/token-pool/update \
-  -H "Content-Type: application/json" \
-  -d '["new_token1", "new_token2"]'
-```
-
-## 🎯 使用场景
-
-### 1. AI 应用开发
-- **智能客服系统**：集成到现有客服平台，提供 24/7 智能问答服务
-- **内容生成工具**：自动生成文章、摘要、翻译等内容
-- **代码助手**：提供代码补全、解释、优化建议等功能
-
-### 2. 工具调用集成
-- **外部 API 集成**：连接天气、搜索、数据库等外部服务
-- **自动化工作流**：构建复杂的多步骤自动化任务
-- **智能决策系统**：基于实时数据进行智能分析和决策
-
-## ❓ 常见问题
-
-**Q: 如何获取 AUTH_TOKEN？**  
-A: `AUTH_TOKEN` 为自己自定义的 api key，在环境变量中配置，需要保证客户端与服务端一致。
-
-**Q: 启动时提示"服务已在运行"怎么办？**  
-A: 这是服务唯一性验证功能，防止重复启动。解决方法：
-- 检查是否已有服务实例在运行：`ps aux | grep z-ai2api-server`
-- 停止现有实例后再启动新的
-- 如果确认没有实例运行，删除 PID 文件：`rm z-ai2api-server.pid`
-- 可通过环境变量 `SERVICE_NAME` 自定义服务名称避免冲突
-
-**Q: 如何通过 Claude Code 使用本服务？**
-
-A: 创建 [zai.js](https://gist.githubusercontent.com/musistudio/b35402d6f9c95c64269c7666b8405348/raw/f108d66fa050f308387938f149a2b14a295d29e9/gistfile1.txt) 这个 ccr 插件放在`./.claude-code-router/plugins`目录下，配置 `./.claude-code-router/config.json` 指向本服务地址，使用 `AUTH_TOKEN` 进行认证。
-
-示例配置：
+#### 2. Provider Credentials (`config/providers.json`)
 
 ```json
 {
-  "LOG": false,
-  "LOG_LEVEL": "debug",
-  "CLAUDE_PATH": "",
-  "HOST": "127.0.0.1",
-  "PORT": 3456,
-  "APIKEY": "",
-  "API_TIMEOUT_MS": "600000",
-  "PROXY_URL": "",
-  "transformers": [
-    {
-      "name": "zai",
-      "path": "C:\\Users\\Administrator\\.claude-code-router\\plugins\\zai.js",
-      "options": {}
-    }
-  ],
-  "Providers": [
-    {
-      "name": "GLM",
-      "api_base_url": "http://127.0.0.1:8080/v1/chat/completions",
-      "api_key": "sk-your-api-key",
-      "models": ["GLM-4.5", "GLM-4.5-Air"],
-      "transformers": {
-        "use": ["zai"]
-      }
-    }
-  ],
-  "StatusLine": {
-    "enabled": false,
-    "currentStyle": "default",
-    "default": {
-      "modules": []
-    },
-    "powerline": {
-      "modules": []
-    }
-  },
-  "Router": {
-    "default": "GLM,GLM-4.5",
-    "background": "GLM,GLM-4.5",
-    "think": "GLM,GLM-4.5",
-    "longContext": "GLM,GLM-4.5",
-    "longContextThreshold": 60000,
-    "webSearch": "GLM,GLM-4.5",
-    "image": "GLM,GLM-4.5"
-  },
-  "CUSTOM_ROUTER_PATH": ""
+    "providers": [
+        {
+            "name": "zai",
+            "baseUrl": "https://chat.z.ai",
+            "loginUrl": "https://chat.z.ai/login",
+            "chatUrl": "https://chat.z.ai/chat",
+            "email": "your-email@example.com",
+            "password": "your-password",
+            "enabled": true
+        },
+        {
+            "name": "k2think",
+            "baseUrl": "https://www.k2think.ai",
+            "loginUrl": "https://www.k2think.ai/login",
+            "chatUrl": "https://www.k2think.ai/chat",
+            "email": "your-email@example.com",
+            "password": "your-password",
+            "enabled": true
+        },
+        {
+            "name": "qwen",
+            "baseUrl": "https://chat.qwen.ai",
+            "loginUrl": "https://chat.qwen.ai/login",
+            "chatUrl": "https://chat.qwen.ai/chat",
+            "email": "your-email@example.com",
+            "password": "your-password",
+            "enabled": true
+        }
+    ]
 }
 ```
 
-**Q: 匿名模式是什么？**  
-A: 匿名模式使用临时 token，避免对话历史共享，保护隐私。
+### Running the Server
 
-**Q: 如何自定义配置？**  
-A: 通过环境变量配置，推荐使用 `.env` 文件。  
+```bash
+# Start the server
+python main.py
 
-**Q: 如何配置 LongCat 认证？**  
-A: 有两种方式配置 LongCat 认证：  
-1. 单个 token：设置 `LONGCAT_PASSPORT_TOKEN` 环境变量  
-2. 多个 token：创建 token 文件并设置 `LONGCAT_TOKENS_FILE` 环境变量  
-
-
-## 🔑 获取 Z.ai API Token
-
-要使用完整的多模态功能，需要获取正式的 Z.ai API Token：
-
-1. 打开 [Z.ai 聊天界面](https://chat.z.ai)，然后登录账号
-2. 按 F12 打开开发者工具
-3. 切换到 "Application" -> "Local Storage" -> "Cookie"列表中找到名为`token`的值
-4. 复制 `token` 值设置为环境变量，也可以使用官方个人账号下设置的 API Key
-
-> ❗ **重要提示**: 获取的 token 可能有时效性，多模态模型需要**官方 Z.ai API 非匿名 Token**，匿名 token 不支持多媒体处理  
-
-## 🔑 获取 LongCat API Token
-
-获取 LongCat API Token 才能正常使用该服务（官网匿名对话次数仅有一次）：
-
-1. 打开 [LongCat 官网](https://longcat.chat/)，登录自己的美团账号
-2. 按 F12 打开开发者工具
-3. 切换到 "Application" -> "Local Storage" -> "Cookie"列表中找到名为`passport_token_key`的值
-4. 复制 `passport_token_key` 值设置为环境变量
-
-
-## 🛠️ 技术栈
-
-| 组件            | 技术                                                                              | 版本    | 说明                                       |
-| --------------- | --------------------------------------------------------------------------------- | ------- | ------------------------------------------ |
-| **Web 框架**    | [FastAPI](https://fastapi.tiangolo.com/)                                          | 0.116.1 | 高性能异步 Web 框架，支持自动 API 文档生成 |
-| **ASGI 服务器** | [Granian](https://github.com/emmett-framework/granian)                            | 2.5.2   | 基于 Rust 的高性能 ASGI 服务器，支持热重载 |
-| **HTTP 客户端** | [HTTPX](https://www.python-httpx.org/) / [Requests](https://requests.readthedocs.io/) | 0.27.0 / 2.32.5 | 异步/同步 HTTP 库，用于上游 API 调用      |
-| **数据验证**    | [Pydantic](https://pydantic.dev/)                                                 | 2.11.7  | 类型安全的数据验证与序列化                 |
-| **配置管理**    | [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) | 2.10.1  | 基于 Pydantic 的配置管理                   |
-| **日志系统**    | [Loguru](https://loguru.readthedocs.io/)                                          | 0.7.3   | 高性能结构化日志库                         |
-| **用户代理**    | [Fake UserAgent](https://pypi.org/project/fake-useragent/)                        | 2.2.0   | 动态用户代理生成                           |
-
-## 🏗️ 技术架构
-
-```
-┌──────────────┐      ┌─────────────────────────────────────┐      ┌─────────────────┐
-│   OpenAI     │      │                                     │      │                 │
-│  Client      │────▶│         FastAPI Server             │────▶│   Z.AI API      │
-└──────────────┘      │                                     │      │                 │
-┌──────────────┐      │ ┌─────────────────────────────────┐ │      │ ┌─────────────┐ │
-│ Claude Code  │      │ │      Provider Router            │ │      │ │0727-360B-API│ │
-│   Router     │────▶│ │  ┌─────────┬─────────┬─────────┐ │ │      │ └─────────────┘ │
-└──────────────┘      │ │  │Z.AI     │K2Think  │LongCat  │ │ │      │ ┌─────────────┐ │
-                      │ │  │Provider │Provider │Provider │ │ │────▶│ │0727-106B-API│ │
-                      │ │  └─────────┴─────────┴─────────┘ │ │      │ └─────────────┘ │
-                      │ └─────────────────────────────────┘ │      │                 │
-                      │ ┌─────────────────────────────────┐ │      └─────────────────┘
-                      │ │     /v1/chat/completions        │ │      ┌─────────────────┐
-                      │ │     /v1/models                  │ │      │  K2Think API    │
-                      │ │     Enhanced Tools              │ │────▶│                 │
-                      │ └─────────────────────────────────┘ │      └─────────────────┘
-                      └─────────────────────────────────────┘      ┌─────────────────┐
-                               OpenAI Compatible API               │  LongCat API    │
-                                                                   │                 │
-                                                                   └─────────────────┘
+# Server will start on http://localhost:8080
+# API endpoint: http://localhost:8080/v1
 ```
 
-## ⭐ Star History
+## 📖 Usage
 
-If you like this project, please give it a star ⭐  
+### Python (OpenAI SDK)
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ZyphrZero/z.ai2api_python&type=Date)](https://star-history.com/#ZyphrZero/z.ai2api_python&Date)
+```python
+import openai
 
+client = openai.OpenAI(
+    api_key="sk-your-api-key",
+    base_url="http://localhost:8080/v1"
+)
 
-## 🤝 贡献指南
+# Use any supported model
+response = client.chat.completions.create(
+    model="GLM-4.5",  # or "K2-Think", "qwen-max", etc.
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "What is quantum computing?"}
+    ],
+    temperature=0.7,
+    max_tokens=500
+)
 
-我们欢迎所有形式的贡献！
-请确保代码符合 PEP 8 规范，并更新相关文档。
+print(response.choices[0].message.content)
+```
 
-## 📄 许可证
+### cURL
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+```bash
+# Chat completion
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "GLM-4.5",
+    "messages": [
+      {"role": "user", "content": "Hello, how are you?"}
+    ]
+  }'
 
-## ⚠️ 免责声明
+# List available models
+curl http://localhost:8080/v1/models \
+  -H "Authorization: Bearer sk-your-api-key"
 
-- 本项目与 Z.AI、K2Think、LongCat 等 AI 提供商官方无关
-- 使用前请确保遵守各提供商的服务条款
-- 请勿用于商业用途或违反使用条款的场景
-- 项目仅供学习和研究使用
-- 用户需自行承担使用风险
+# Streaming response
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "GLM-4.5",
+    "messages": [{"role": "user", "content": "Tell me a story"}],
+    "stream": true
+  }'
+```
+
+### JavaScript/TypeScript
+
+```typescript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  apiKey: 'sk-your-api-key',
+  baseURL: 'http://localhost:8080/v1'
+});
+
+async function chat() {
+  const response = await client.chat.completions.create({
+    model: 'GLM-4.5',
+    messages: [
+      { role: 'user', content: 'What is machine learning?' }
+    ]
+  });
+  
+  console.log(response.choices[0].message.content);
+}
+
+chat();
+```
+
+## 🎯 Supported Models
+
+### Z.AI Provider
+- `GLM-4.5` - Standard chat model
+- `GLM-4.5-Thinking` - Reasoning-focused model
+- `GLM-4.5-Search` - Web search-enabled model
+- `GLM-4.5-Air` - Lightweight model
+- `GLM-4.6` - Latest version
+- `GLM-4.6-Thinking` - Latest reasoning model
+- `GLM-4.6-Search` - Latest search model
+
+### K2Think Provider
+- `MBZUAI-IFM/K2-Think` - Advanced reasoning model
+
+### Qwen Provider
+- `qwen-max` - Most capable model
+- `qwen-max-thinking` - Reasoning mode
+- `qwen-max-search` - Web search capability
+- `qwen-max-image` - Image generation
+- `qwen-plus` - Balanced performance
+- `qwen-turbo` - Fast responses
+- `qwen-long` - Extended context
+
+### LongCat Provider
+- `LongCat-Flash` - Fast responses
+- `LongCat` - Standard model
+- `LongCat-Search` - Search-enabled
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Client Application                │
+│              (OpenAI SDK, cURL, etc.)              │
+└───────────────────────┬─────────────────────────────┘
+                        │
+                        │ HTTP Request (OpenAI Format)
+                        │
+        ┌───────────────▼────────────────┐
+        │      API Server (FastAPI)      │
+        │   - Authentication Middleware   │
+        │   - Request Validation         │
+        └───────────────┬────────────────┘
+                        │
+                        │
+        ┌───────────────▼────────────────┐
+        │      Provider Router           │
+        │   - Model → Provider Mapping   │
+        │   - Load Balancing             │
+        └───────────────┬────────────────┘
+                        │
+         ┌──────────────┼──────────────┐
+         │              │              │
+    ┌────▼───┐    ┌────▼───┐    ┌────▼───┐
+    │  Z.AI  │    │K2Think │    │  Qwen  │
+    │Provider│    │Provider│    │Provider│
+    │        │    │        │    │        │
+    │- Auth  │    │- Auth  │    │- Auth  │
+    │- Trans │    │- Trans │    │- Trans │
+    │- Stream│    │- Stream│    │- Stream│
+    └────┬───┘    └────┬───┘    └────┬───┘
+         │             │              │
+         │    External Provider APIs  │
+         └──────────────┴──────────────┘
+```
+
+## 📂 Project Structure
+
+```
+z.ai2api_python/
+├── app/
+│   ├── auth/                    # Authentication modules
+│   │   ├── __init__.py
+│   │   ├── provider_auth.py     # Provider login/session
+│   │   └── session_store.py     # Encrypted session storage
+│   ├── core/                    # Core application
+│   │   ├── __init__.py
+│   │   ├── config.py            # Configuration management
+│   │   └── openai.py            # OpenAI-compatible endpoints
+│   ├── models/                  # Data models
+│   │   ├── __init__.py
+│   │   └── schemas.py           # Pydantic models
+│   └── providers/               # Provider implementations
+│       ├── __init__.py
+│       ├── base.py              # Base provider class
+│       ├── provider_factory.py  # Provider routing
+│       ├── zai_provider.py      # Z.AI implementation
+│       ├── k2think_provider.py  # K2Think implementation
+│       ├── qwen_provider.py     # Qwen implementation
+│       └── longcat_provider.py  # LongCat implementation
+├── config/
+│   ├── providers.json           # Provider credentials
+│   └── providers.json.example   # Example configuration
+├── docs/
+│   └── AUTHENTICATION.md        # Authentication guide
+├── .sessions/                   # Encrypted session files
+├── .env                         # Environment variables
+├── .env.example                 # Example environment
+├── main.py                      # Application entry point
+├── requirements.txt             # Python dependencies
+└── README.md                    # This file
+```
+
+## 🔐 Security
+
+### Authentication Flow
+
+1. **API Request** → Client sends request with Bearer token
+2. **Token Validation** → Server validates against `AUTH_TOKEN` or token file
+3. **Provider Selection** → Router selects provider based on model
+4. **Session Check** → Provider checks for valid cached session
+5. **Auto Login** → If session invalid, auto-login with credentials
+6. **Request Transform** → Convert OpenAI format to provider format
+7. **Provider API Call** → Make authenticated request to provider
+8. **Response Transform** → Convert provider response to OpenAI format
+
+### Session Management
+
+- Sessions stored encrypted in `.sessions/` directory
+- Encryption: PBKDF2-HMAC-SHA256 with random salt
+- Auto-refresh on expiration
+- Secure deletion of expired sessions
+
+### Best Practices
+
+✅ **DO:**
+- Use strong API tokens (`openssl rand -hex 32`)
+- Set `SKIP_AUTH_TOKEN=false` in production
+- Rotate provider credentials regularly
+- Keep `.env` and `config/providers.json` private
+- Use environment variables in deployment
+
+❌ **DON'T:**
+- Commit credentials to version control
+- Use `SKIP_AUTH_TOKEN=true` in production
+- Share API tokens
+- Store sessions in public locations
+
+## 🧪 Testing
+
+### Run Validation Tests
+
+```bash
+# Install test dependencies
+pip install pytest openai
+
+# Run tests
+python tests/test_providers.py
+```
+
+### Manual Testing
+
+```bash
+# Test models endpoint
+curl http://localhost:8080/v1/models \
+  -H "Authorization: Bearer sk-test-key"
+
+# Test chat completion
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer sk-test-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "GLM-4.5",
+    "messages": [{"role": "user", "content": "Test message"}],
+    "max_tokens": 50
+  }'
+```
+
+## 📊 Monitoring
+
+### Logs
+
+Server logs include:
+- Request routing information
+- Provider selection
+- Authentication status
+- Error details
+- Response timing
+
+Example log output:
+```
+2025-10-05 15:39:36 | INFO | 😶‍🌫️ 收到客户端请求 - 模型: GLM-4.5
+2025-10-05 15:39:36 | INFO | 🚦 路由请求: 模型=GLM-4.5
+2025-10-05 15:39:36 | DEBUG | 🎯 模型 GLM-4.5 找到提供商 zai
+2025-10-05 15:39:36 | INFO | ✅ 使用提供商: zai
+2025-10-05 15:39:37 | INFO | 🎉 请求处理完成: zai
+```
+
+### Health Check
+
+```bash
+# Check if server is running
+curl http://localhost:8080/v1/models
+
+# Expected response
+{
+  "object": "list",
+  "data": [
+    {"id": "GLM-4.5", "object": "model", "owned_by": "zai"},
+    ...
+  ]
+}
+```
+
+## 🚀 Deployment
+
+### Docker (Recommended)
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8080
+
+CMD ["python", "main.py"]
+```
+
+```bash
+# Build
+docker build -t openai-multi-provider .
+
+# Run
+docker run -d \
+  -p 8080:8080 \
+  -v $(pwd)/config:/app/config \
+  -v $(pwd)/.sessions:/app/.sessions \
+  -e AUTH_TOKEN=sk-your-api-key \
+  --name openai-api \
+  openai-multi-provider
+```
+
+### Systemd Service
+
+```ini
+[Unit]
+Description=OpenAI Multi-Provider API Server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/openai-api
+Environment="PATH=/opt/openai-api/venv/bin"
+ExecStart=/opt/openai-api/venv/bin/python main.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Environment Variables for Production
+
+```bash
+# .env
+AUTH_TOKEN=sk-$(openssl rand -hex 32)
+SKIP_AUTH_TOKEN=false
+LOG_LEVEL=INFO
+
+# Optional
+AUTH_TOKENS_FILE=/secure/path/tokens.txt
+LONGCAT_PASSPORT_TOKEN=your-token
+SESSION_ENCRYPTION_KEY=$(openssl rand -hex 32)
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Issue: "Invalid API key"**
+- Check `AUTH_TOKEN` in `.env`
+- Verify Authorization header format: `Bearer <token>`
+- Ensure `SKIP_AUTH_TOKEN` setting matches your intent
+
+**Issue: "Model not found"**
+- Verify model name is correct
+- Check provider is enabled in `config/providers.json`
+- Ensure provider credentials are valid
+
+**Issue: Provider authentication fails**
+- Clear sessions: `rm -rf .sessions/`
+- Verify credentials in `config/providers.json`
+- Check provider website for account status
+
+**Issue: LongCat "Missing passport token"**
+- Set `LONGCAT_PASSPORT_TOKEN` environment variable
+- Or configure `LONGCAT_TOKENS_FILE`
+
+### Debug Mode
+
+Enable detailed logging:
+```bash
+export LOG_LEVEL=DEBUG
+python main.py
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Development Setup
+
+```bash
+# Clone and install
+git clone https://github.com/Zeeeepa/z.ai2api_python.git
+cd z.ai2api_python
+pip install -r requirements.txt
+
+# Install dev dependencies
+pip install pytest black flake8 mypy
+
+# Run tests
+pytest tests/
+
+# Format code
+black app/
+
+# Lint
+flake8 app/
+```
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [OpenAI](https://openai.com/) - API specification
+- [FastAPI](https://fastapi.tiangolo.com/) - Web framework
+- Provider APIs: Z.AI, K2Think, Qwen, LongCat
+
+## 📞 Support
+
+- 🐛 **Issues**: [GitHub Issues](https://github.com/Zeeeepa/z.ai2api_python/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/Zeeeepa/z.ai2api_python/discussions)
+- 📧 **Email**: support@example.com
+
+## 📈 Roadmap
+
+- [ ] Add more provider integrations
+- [ ] Implement request caching
+- [ ] Add rate limiting
+- [ ] Create web dashboard
+- [ ] Add usage analytics
+- [ ] Support for function calling
+- [ ] Image generation endpoints
+- [ ] Audio transcription support
 
 ---
 
-<div align="center">
-Made with ❤️ by the community
-</div>
+**Made with ❤️ by the community**
+
