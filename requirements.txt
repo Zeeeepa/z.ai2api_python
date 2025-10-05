@@ -9,3 +9,4 @@ fake-useragent==2.2.0
 loguru==0.7.3
 psutil>=7.0.0
 json-repair==0.44.1
+cryptography>=43.0.0

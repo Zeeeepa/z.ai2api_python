@@ -8,10 +8,13 @@
 
 import time
 from typing import Dict, List, Optional, Union, AsyncGenerator, Any
+import json
+from pathlib import Path
 from app.providers.base import BaseProvider, provider_registry
 from app.providers.zai_provider import ZAIProvider
 from app.providers.k2think_provider import K2ThinkProvider
 from app.providers.longcat_provider import LongCatProvider
+from app.providers.qwen_provider import QwenProvider
 from app.models.schemas import OpenAIRequest
 from app.core.config import settings
 from app.utils.logger import get_logger
@@ -26,12 +29,31 @@ class ProviderFactory:
         self._initialized = False
         self._default_provider = "zai"
     
+    def _load_provider_configs(self) -> Dict[str, Dict[str, str]]:
+        """Load provider configurations from JSON file"""
+        config_path = Path("config/providers.json")
+        if config_path.exists():
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    configs = {}
+                    for provider in data.get("providers", []):
+                        if provider.get("enabled", True):
+                            configs[provider["name"]] = provider
+                    return configs
+            except Exception as e:
+                logger.warning(f"Failed to load provider configs: {e}")
+        return {}
+    
     def initialize(self):
         """初始化所有提供商"""
         if self._initialized:
             return
 
         try:
+            # Load provider configurations
+            provider_configs = self._load_provider_configs()
+            
             # 注册 Z.AI 提供商
             zai_provider = ZAIProvider()
             provider_registry.register(
@@ -53,7 +75,22 @@ class ProviderFactory:
                 longcat_provider.get_supported_models()
             )
             
+            # 注册 Qwen 提供商（如果配置存在）
+            qwen_config = provider_configs.get("qwen")
+            if qwen_config:
+                logger.info("🔐 Initializing Qwen provider with authentication")
+                qwen_provider = QwenProvider(auth_config=qwen_config)
+            else:
+                logger.info("⚠️ Initializing Qwen provider without authentication (manual token required)")
+                qwen_provider = QwenProvider()
+            
+            provider_registry.register(
+                qwen_provider,
+                qwen_provider.get_supported_models()
+            )
+            
             self._initialized = True
+            logger.info(f"✅ Initialized {len(provider_registry.list_providers())} providers")
             
         except Exception as e:
             logger.error(f"❌ 提供商工厂初始化失败: {e}")
