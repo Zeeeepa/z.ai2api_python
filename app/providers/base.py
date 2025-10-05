@@ -157,6 +157,34 @@ class BaseProvider(ABC):
             },
             "system_fingerprint": f"fp_{self.name}_001",
         }
+    
+    def create_stream_chunk(
+        self,
+        chat_id: str,
+        model: str,
+        content: str = "",
+        finish_reason: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """创建OpenAI格式的流式响应chunk"""
+        chunk = {
+            "id": chat_id,
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "delta": {},
+                "finish_reason": finish_reason,
+                "logprobs": None,
+            }],
+            "system_fingerprint": f"fp_{self.name}_001",
+        }
+        
+        # Add content to delta if provided
+        if content:
+            chunk["choices"][0]["delta"]["content"] = content
+        
+        return chunk
 
     def create_openai_response_with_reasoning(
         self,

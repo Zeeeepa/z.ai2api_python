@@ -96,27 +96,47 @@ class QwenProvider(BaseProvider):
     
     async def get_auth_headers(self) -> Dict[str, str]:
         """
-        Get authentication headers with cookies and token.
+        Get authentication headers with Bearer token and required headers.
+        
+        Based on qwenchat2api TypeScript implementation, requires:
+        - Authorization: Bearer token (compressed localStorage + cookie)
+        - source: web
+        - x-request-id: UUID  
+        - User-Agent: Chrome
+        - Content-Type: application/json
         
         Returns:
-            Headers dictionary with Authorization and Cookie
+            Headers dictionary with all required fields
         """
-        headers = self.config.headers.copy()
+        import uuid
+        
+        # Start with base headers
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "Origin": "https://chat.qwen.ai",
+            "Referer": "https://chat.qwen.ai/chat",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+            "source": "web",
+            "x-request-id": str(uuid.uuid4())
+        }
         
         if self.auth:
-            # Get fresh cookies
-            cookies = await self.auth.get_cookies()
-            if cookies:
-                # Convert cookies dict to Cookie header string
-                cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
-                headers["Cookie"] = cookie_str
-                logger.debug(f"Added {len(cookies)} cookies to headers")
-            
-            # Get token if available
+            # Get Bearer token (most important!)
             token = await self.auth.get_token()
             if token:
                 headers["Authorization"] = f"Bearer {token}"
-                logger.debug("Added Bearer token to headers")
+                logger.debug(f"✅ Added Bearer token to headers (length: {len(token)})")
+            else:
+                logger.warning("⚠️ No Bearer token available - API calls may fail")
+            
+            # Also add ssxmod_itna cookie if available (from session extra)
+            session = await self.auth.get_valid_session()
+            if session and "extra" in session:
+                ssxmod_itna = session["extra"].get("ssxmod_itna")
+                if ssxmod_itna:
+                    headers["Cookie"] = f"ssxmod_itna={ssxmod_itna}"
+                    logger.debug("✅ Added ssxmod_itna cookie to headers")
         
         return headers
     
@@ -172,6 +192,56 @@ class QwenProvider(BaseProvider):
         except Exception as e:
             logger.error(f"Exception creating chat session: {e}", exc_info=True)
             return None
+    
+    async def chat_completion(
+        self,
+        request: OpenAIRequest,
+        **kwargs
+    ) -> Union[Dict[str, Any], AsyncGenerator[str, None]]:
+        """
+        Main chat completion endpoint.
+        
+        Handles both streaming and non-streaming requests.
+        
+        Args:
+            request: OpenAI format request
+            **kwargs: Additional parameters
+            
+        Returns:
+            OpenAI formatted response or async generator for streaming
+        """
+        import httpx
+        
+        # Transform request
+        transformed = await self.transform_request(request)
+        
+        # Make HTTP request
+        async with httpx.AsyncClient(timeout=self.config.timeout) as client:
+            http_response = await client.post(
+                transformed["url"],
+                json=transformed["body"],
+                headers=transformed["headers"]
+            )
+            
+            # Handle streaming
+            if request.stream:
+                async def stream_generator():
+                    async for chunk in self.stream_response(
+                        http_response,
+                        request,
+                        transformed
+                    ):
+                        yield chunk
+                
+                return stream_generator()
+            
+            # Handle non-streaming
+            else:
+                return await self.transform_response(
+                    http_response,
+                    request,
+                    transformed
+                )
     
     async def transform_request(self, request: OpenAIRequest) -> Dict[str, Any]:
         """
@@ -354,8 +424,7 @@ class QwenProvider(BaseProvider):
                 openai_response = self.create_openai_response(
                     chat_id=chat_id,
                     model=request.model,
-                    content=content,
-                    finish_reason="stop"
+                    content=content
                 )
                 
                 # Add reasoning content if present (thinking mode)
@@ -485,4 +554,3 @@ class QwenProvider(BaseProvider):
             )
             yield f"data: {json.dumps(error_chunk)}\n\n"
             yield "data: [DONE]\n\n"
-
