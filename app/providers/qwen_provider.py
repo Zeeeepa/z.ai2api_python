@@ -554,3 +554,182 @@ class QwenProvider(BaseProvider):
             )
             yield f"data: {json.dumps(error_chunk)}\n\n"
             yield "data: [DONE]\n\n"
+    
+    def calculate_aspect_ratio(self, size: str) -> str:
+        """
+        Calculate aspect ratio from size string (e.g., "1024x768" -> "4:3")
+        
+        Args:
+            size: Size string in format "WIDTHxHEIGHT"
+            
+        Returns:
+            Aspect ratio string like "16:9" or "1:1"
+        """
+        try:
+            width, height = map(int, size.split('x'))
+            
+            # Calculate GCD for simplification
+            def gcd(a: int, b: int) -> int:
+                while b:
+                    a, b = b, a % b
+                return a
+            
+            divisor = gcd(width, height)
+            ratio = f"{width//divisor}:{height//divisor}"
+            
+            logger.debug(f"Calculated aspect ratio for {size}: {ratio}")
+            return ratio
+            
+        except Exception as e:
+            logger.error(f"Failed to calculate aspect ratio for '{size}': {e}")
+            return "1:1"  # Default fallback
+    
+    async def generate_image(
+        self,
+        prompt: str,
+        model: str = "qwen-max",
+        size: str = "1024x1024",
+        n: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Generate image from text prompt (text-to-image)
+        
+        Args:
+            prompt: Text description of desired image
+            model: Model name (will strip -image suffix)
+            size: Image size like "1024x1024"
+            n: Number of images (currently only 1 supported)
+            
+        Returns:
+            OpenAI-compatible response with image URL
+        """
+        import uuid
+        
+        try:
+            # Clean model name
+            base_model = model.replace('-image', '')
+            
+            # Create chat session for image generation
+            chat_id = await self.create_chat_session(base_model, chat_type="t2i")
+            if not chat_id:
+                raise Exception("Failed to create chat session for image generation")
+            
+            # Calculate aspect ratio
+            aspect_ratio = self.calculate_aspect_ratio(size)
+            
+            # Build request
+            request_body = {
+                "model": base_model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt,
+                        "chat_type": "t2i",
+                        "extra": {},
+                        "feature_config": {
+                            "output_schema": "phase",
+                            "thinking_enabled": False
+                        }
+                    }
+                ],
+                "stream": True,
+                "incremental_output": True,
+                "chat_type": "t2i",
+                "session_id": str(uuid.uuid4()),
+                "chat_id": chat_id,
+                "parent_id": None,
+                "chat_mode": "normal",
+                "timestamp": int(time.time() * 1000),
+                "feature_config": {
+                    "output_schema": "phase",
+                    "thinking_enabled": False
+                },
+                "image_gen_config": {
+                    "aspect_ratio": aspect_ratio,
+                    "size": size
+                }
+            }
+            
+            # Get headers
+            headers = await self.get_auth_headers()
+            
+            logger.info(f"Generating image: prompt='{prompt[:50]}...', size={size}")
+            
+            # Make request
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    f"{self.CHAT_COMPLETIONS_URL}?chat_id={chat_id}",
+                    json=request_body,
+                    headers=headers
+                )
+                
+                if response.status_code != 200:
+                    raise Exception(f"Image generation failed: {response.status_code} - {response.text}")
+                
+                # Parse streaming response to extract image URL
+                image_urls = []
+                sent_urls = set()  # Track to prevent duplicates
+                
+                buffer = ""
+                async for chunk in response.aiter_text():
+                    buffer += chunk
+                    
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        
+                        if not line or not line.startswith("data:"):
+                            continue
+                        
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        
+                        try:
+                            data = json.loads(data_str)
+                            
+                            # Check for image_gen phase
+                            if data.get("type") == "image_gen" or "image_gen" in str(data):
+                                # Extract URL from various possible locations
+                                url = None
+                                
+                                if "data" in data:
+                                    url = data["data"].get("url") or data["data"].get("content")
+                                
+                                # Also check markdown format
+                                content = data.get("data", {}).get("content", "")
+                                if "![" in content and "](" in content:
+                                    import re
+                                    matches = re.findall(r'!\[.*?\]\((.*?)\)', content)
+                                    if matches:
+                                        url = matches[0]
+                                
+                                if url and url not in sent_urls:
+                                    image_urls.append(url)
+                                    sent_urls.add(url)
+                                    logger.info(f"✅ Found image URL: {url}")
+                                    
+                        except json.JSONDecodeError:
+                            continue
+                        except Exception as e:
+                            logger.debug(f"Error parsing chunk: {e}")
+                            continue
+                
+                if not image_urls:
+                    raise Exception("No image URLs found in response")
+                
+                # Return OpenAI-compatible response
+                return {
+                    "created": int(time.time()),
+                    "data": [
+                        {
+                            "url": url,
+                            "revised_prompt": prompt
+                        }
+                        for url in image_urls[:n]
+                    ]
+                }
+                
+        except Exception as e:
+            logger.error(f"Image generation failed: {e}", exc_info=True)
+            raise
