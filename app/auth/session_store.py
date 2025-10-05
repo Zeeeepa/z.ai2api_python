@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, Optional, Any
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 
 from app.utils.logger import get_logger
@@ -56,7 +56,7 @@ class SessionStore:
         machine_id = os.getenv("HOSTNAME", "default-machine")
         salt = b"z.ai2api_python_session_salt"
         
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
@@ -187,4 +187,3 @@ class SessionStore:
                 session.get("extra")
             )
         return False
-
