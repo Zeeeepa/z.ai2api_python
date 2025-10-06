@@ -85,7 +85,7 @@ class GrokAuthManager:
         self._context = await self._playwright.chromium.launch_persistent_context(
             str(user_data_dir),
             headless=True,
-            channel="chrome",
+            # channel="chrome",  # Use default chromium instead of chrome channel
             args=[
                 "--no-first-run",
                 "--no-sandbox",
@@ -421,4 +421,3 @@ class GrokAuthManager:
             await self._playwright.stop()
             self._playwright = None
         logger.info("🧹 Browser resources cleaned up")
-
