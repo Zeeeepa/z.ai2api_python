@@ -2,38 +2,805 @@
 # -*- coding: utf-8 -*-
 
 """
-Qwen Provider - FIXED Implementation
-=====================================
+Qwen Provider - CONSOLIDATED IMPLEMENTATION
+============================================
 
-This provider now uses the correct request structure based on the qwenchat2api
-TypeScript reference implementation.
+This is the unified Qwen provider consolidating features from:
+- qwen.py: Basic chat completion, model parsing
+- qwen_builder.py: Request building, UUID generation
+- qwen_provider.py: Main provider, authentication
+- qwen_upload.py: File upload via STS tokens
 
-ALL 9 CRITICAL ISSUES FIXED:
-1. ✅ session_id (UUID) - now included
-2. ✅ chat_id (UUID) - now included
-3. ✅ parent_id: null - now included
-4. ✅ chat_mode: "normal" - now included
-5. ✅ timestamp - now included
-6. ✅ Message chat_type - now included
-7. ✅ Message extra: {} - now included
-8. ✅ thinking_budget - correct structure in feature_config
-9. ✅ feature_config - proper structure with output_schema
+Features:
+✅ Text chat (normal, thinking, search modes)
+✅ Image generation & editing
+✅ Video generation
+✅ Deep research
+✅ File uploads (image, video, audio, documents)
+✅ Multi-modal support
+✅ Streaming & non-streaming
+✅ Automatic authentication
 """
 
 import json
 import time
 import httpx
 import asyncio
-from typing import Dict, List, Any, Optional, AsyncGenerator, Union
+import hashlib
+import mimetypes
+import uuid
+from typing import Dict, List, Any, Optional, AsyncGenerator, Union, Tuple
 from datetime import datetime
+from dataclasses import dataclass
+from io import BytesIO
 
 from app.providers.base import BaseProvider, ProviderConfig
-from app.providers.qwen_builder import QwenRequestBuilder, build_qwen_request
 from app.models.schemas import OpenAIRequest, Message
 from app.auth.provider_auth import QwenAuth
 from app.utils.logger import get_logger
 
 logger = get_logger()
+
+@dataclass
+class QwenMessage:
+    """Qwen-formatted message"""
+    role: str
+    content: str
+    chat_type: str = "text"
+    extra: dict = None
+    files: list = None
+    feature_config: dict = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        result = {
+            "role": self.role,
+            "content": self.content,
+            "chat_type": self.chat_type,
+            "extra": self.extra or {}
+        }
+        
+        if self.files is not None:
+            result["files"] = self.files
+            
+        if self.feature_config is not None:
+            result["feature_config"] = self.feature_config
+            
+        return result
+
+
+class QwenUploader:
+    """
+    Qwen file upload handler with STS token authentication
+    
+    Supports:
+    - Image files (JPEG, PNG, GIF, WebP, BMP)
+    - Video files (MP4, AVI, MOV, WMV, FLV)
+    - Audio files (MP3, WAV, AAC, OGG)
+    - Documents (PDF, TXT, DOC)
+    """
+    
+    # Configuration constants
+    STS_TOKEN_URL = "https://chat.qwen.ai/api/v1/files/getstsToken"
+    MAX_RETRIES = 3
+    TIMEOUT = 30.0
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+    RETRY_DELAY = 1.0  # seconds
+    
+    # Supported file types (using main types for detection)
+    SUPPORTED_TYPES = {
+        'image': ['image'],
+        'video': ['video'],
+        'audio': ['audio'],
+        'document': ['application', 'text']
+    }
+    
+    def __init__(self, auth_token: str):
+        """
+        Initialize uploader with auth token
+        
+        Args:
+            auth_token: Bearer token for Qwen authentication
+        """
+        self.auth_token = auth_token if auth_token.startswith('Bearer ') else f'Bearer {auth_token}'
+        self._upload_cache: Dict[str, Dict[str, str]] = {}  # SHA256 -> file_info cache
+    
+    @staticmethod
+    def validate_file_size(file_size: int) -> bool:
+        """
+        Validate file size is within limits
+        
+        Args:
+            file_size: File size in bytes
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        return 0 < file_size <= QwenUploader.MAX_FILE_SIZE
+    
+    @staticmethod
+    def get_simple_file_type(mime_type: str) -> str:
+        """
+        Get simplified file type from MIME type
+        
+        Args:
+            mime_type: Full MIME type (e.g., "image/jpeg")
+            
+        Returns:
+            Simplified type: "image", "video", "audio", "document", or "file"
+        """
+        if not mime_type:
+            return 'file'
+        
+        main_type = mime_type.split('/')[0].lower()
+        
+        # Check each category
+        for category, types in QwenUploader.SUPPORTED_TYPES.items():
+            if main_type in types:
+                return category
+        
+        return 'file'
+    
+    @staticmethod
+    def calculate_file_hash(file_buffer: bytes) -> str:
+        """
+        Calculate SHA256 hash of file for caching
+        
+        Args:
+            file_buffer: File content bytes
+            
+        Returns:
+            Hex string of SHA256 hash
+        """
+        return hashlib.sha256(file_buffer).hexdigest()
+    
+    async def request_sts_token(
+        self,
+        filename: str,
+        filesize: int,
+        filetype_simple: str,
+        retry_count: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Request STS token from Qwen API with retry mechanism
+        
+        Args:
+            filename: Original filename
+            filesize: File size in bytes
+            filetype_simple: Simplified file type
+            retry_count: Current retry attempt
+            
+        Returns:
+            Dict with 'credentials' and 'file_info'
+            
+        Raises:
+            Exception: If request fails after retries
+        """
+        try:
+            # Validation
+            if not filename:
+                raise ValueError("Filename cannot be empty")
+            
+            if not self.validate_file_size(filesize):
+                raise ValueError(f"File size exceeds limit of {self.MAX_FILE_SIZE / 1024 / 1024}MB")
+            
+            # Generate request ID
+            import uuid
+            request_id = str(uuid.uuid4())
+            
+            # Build headers
+            headers = {
+                'Authorization': self.auth_token,
+                'Content-Type': 'application/json',
+                'x-request-id': request_id,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            # Build payload
+            payload = {
+                'filename': filename,
+                'filesize': filesize,
+                'filetype': filetype_simple
+            }
+            
+            logger.info(f"🎫 Requesting STS token: {filename} ({filesize} bytes, {filetype_simple})")
+            
+            # Make request
+            async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
+                response = await client.post(
+                    self.STS_TOKEN_URL,
+                    json=payload,
+                    headers=headers
+                )
+                
+                if response.status_code == 200:
+                    sts_data = response.json()
+                    
+                    # Extract credentials
+                    credentials = {
+                        'access_key_id': sts_data.get('access_key_id'),
+                        'access_key_secret': sts_data.get('access_key_secret'),
+                        'security_token': sts_data.get('security_token')
+                    }
+                    
+                    # Extract file info
+                    file_info = {
+                        'url': sts_data.get('file_url'),
+                        'path': sts_data.get('file_path'),
+                        'bucket': sts_data.get('bucketname'),
+                        'endpoint': f"{sts_data.get('region')}.aliyuncs.com",
+                        'id': sts_data.get('file_id')
+                    }
+                    
+                    # Validate completeness
+                    required_creds = ['access_key_id', 'access_key_secret', 'security_token']
+                    required_info = ['url', 'path', 'bucket', 'endpoint', 'id']
+                    
+                    missing_creds = [k for k in required_creds if not credentials.get(k)]
+                    missing_info = [k for k in required_info if not file_info.get(k)]
+                    
+                    if missing_creds or missing_info:
+                        missing = missing_creds + missing_info
+                        raise ValueError(f"STS response incomplete, missing: {', '.join(missing)}")
+                    
+                    logger.info("✅ STS token acquired successfully")
+                    return {
+                        'credentials': credentials,
+                        'file_info': file_info
+                    }
+                else:
+                    raise Exception(f"STS token request failed: {response.status_code}")
+        
+        except Exception as e:
+            logger.error(f"❌ STS token request failed (retry: {retry_count}): {e}")
+            
+            # Handle 403 specially
+            if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 403:
+                logger.error("403 Forbidden - Token permission issue")
+                raise Exception("Authentication failed, check token permissions")
+            
+            # Retry logic
+            if retry_count < self.MAX_RETRIES:
+                delay = self.RETRY_DELAY * (2 ** retry_count)  # Exponential backoff
+                logger.warning(f"⏳ Retrying in {delay}s...")
+                await asyncio.sleep(delay)
+                return await self.request_sts_token(filename, filesize, filetype_simple, retry_count + 1)
+            
+            raise
+    
+    async def upload_to_oss(
+        self,
+        file_buffer: bytes,
+        sts_credentials: Dict[str, str],
+        oss_info: Dict[str, str],
+        content_type: str,
+        retry_count: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Upload file to Aliyun OSS using STS credentials
+        
+        Args:
+            file_buffer: File content bytes
+            sts_credentials: STS credentials from request_sts_token
+            oss_info: OSS information from request_sts_token
+            content_type: MIME type
+            retry_count: Current retry attempt
+            
+        Returns:
+            Upload result dict
+            
+        Raises:
+            Exception: If upload fails after retries
+        """
+        try:
+            # Validation
+            if not file_buffer or not sts_credentials or not oss_info:
+                raise ValueError("Missing required upload parameters")
+            
+            logger.info(f"📤 Uploading to OSS: {oss_info['path']} ({len(file_buffer)} bytes)")
+            
+            # Build OSS URL
+            oss_url = f"https://{oss_info['bucket']}.{oss_info['endpoint']}/{oss_info['path']}"
+            
+            # Build headers for OSS
+            headers = {
+                'Content-Type': content_type or 'application/octet-stream',
+                'x-oss-security-token': sts_credentials['security_token']
+            }
+            
+            # Build auth header (OSS uses different format)
+            from datetime import datetime
+            date_str = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+            
+            # Simple PUT request with STS token
+            async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
+                response = await client.put(
+                    oss_url,
+                    content=file_buffer,
+                    headers={
+                        **headers,
+                        'Date': date_str,
+                        'Authorization': f"OSS {sts_credentials['access_key_id']}:{sts_credentials['access_key_secret']}"
+                    }
+                )
+                
+                if response.status_code == 200:
+                    logger.info("✅ File uploaded to OSS successfully")
+                    return {'success': True, 'status': 200}
+                else:
+                    raise Exception(f"OSS upload failed: {response.status_code}")
+        
+        except Exception as e:
+            logger.error(f"❌ OSS upload failed (retry: {retry_count}): {e}")
+            
+            # Retry logic
+            if retry_count < self.MAX_RETRIES:
+                delay = self.RETRY_DELAY * (2 ** retry_count)
+                logger.warning(f"⏳ Retrying OSS upload in {delay}s...")
+                await asyncio.sleep(delay)
+                return await self.upload_to_oss(
+                    file_buffer, sts_credentials, oss_info, content_type, retry_count + 1
+                )
+            
+            raise
+    
+    async def upload_file(
+        self,
+        file_buffer: bytes,
+        filename: str
+    ) -> Dict[str, Any]:
+        """
+        Complete file upload workflow: STS token -> OSS upload
+        
+        Args:
+            file_buffer: File content bytes
+            filename: Original filename (e.g., "image.png")
+            
+        Returns:
+            Dict with file_url, file_id, and message
+            
+        Raises:
+            Exception: If any step fails
+        """
+        try:
+            # Validation
+            if not file_buffer or not filename:
+                raise ValueError("Missing required upload parameters")
+            
+            # Calculate hash for caching
+            file_hash = self.calculate_file_hash(file_buffer)
+            
+            # Check cache
+            if file_hash in self._upload_cache:
+                logger.info(f"✨ Using cached upload for {filename}")
+                return self._upload_cache[file_hash]
+            
+            filesize = len(file_buffer)
+            mime_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+            filetype_simple = self.get_simple_file_type(mime_type)
+            
+            # File size validation
+            if not self.validate_file_size(filesize):
+                raise ValueError(f"File size exceeds limit of {self.MAX_FILE_SIZE / 1024 / 1024}MB")
+            
+            logger.info(f"📤 Starting upload: {filename} ({filesize} bytes, {mime_type})")
+            
+            # Step 1: Get STS token
+            sts_result = await self.request_sts_token(filename, filesize, filetype_simple)
+            credentials = sts_result['credentials']
+            file_info = sts_result['file_info']
+            
+            # Step 2: Upload to OSS
+            await self.upload_to_oss(file_buffer, credentials, file_info, mime_type)
+            
+            logger.info("✅ File upload workflow complete")
+            
+            result = {
+                'status': 200,
+                'file_url': file_info['url'],
+                'file_id': file_info['id'],
+                'message': 'File uploaded successfully'
+            }
+            
+            # Cache result
+            self._upload_cache[file_hash] = result
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ File upload workflow failed: {e}")
+            raise
+
+
+async def upload_file_to_qwen_oss(
+    file_buffer: bytes,
+    filename: str,
+    auth_token: str
+) -> Dict[str, Any]:
+    """
+    Convenience function for file upload
+    
+    Args:
+        file_buffer: File content bytes
+        filename: Original filename
+        auth_token: Qwen authentication token
+        
+    Returns:
+        Dict with file_url, file_id, and message
+    """
+    uploader = QwenUploader(auth_token)
+    return await uploader.upload_file(file_buffer, filename)
+
+
+class QwenRequestBuilder:
+    """
+    Builds properly structured Qwen API requests.
+    
+    Based on qwenchat2api/main.ts reference implementation.
+    """
+    
+    # Size mappings from OpenAI format to Qwen aspect ratios
+    SIZE_MAP = {
+        "256x256": "1:1",
+        "512x512": "1:1",
+        "1024x1024": "1:1",
+        "1792x1024": "16:9",
+        "1024x1792": "9:16",
+        "2048x2048": "1:1",
+        "1152x768": "3:2",
+        "768x1152": "2:3",
+    }
+    
+    @staticmethod
+    def generate_uuid() -> str:
+        """Generate UUID for session_id or chat_id"""
+        return str(uuid.uuid4())
+    
+    @staticmethod
+    def get_timestamp() -> int:
+        """Get current timestamp in milliseconds"""
+        return int(time.time() * 1000)
+    
+    @staticmethod
+    def determine_chat_type(model: str) -> str:
+        """
+        Determine chat type from model name.
+        
+        Args:
+            model: Model name (e.g., "qwen-max-image", "qwen-max-thinking")
+            
+        Returns:
+            Chat type: "t2i", "image_edit", "t2v", or "normal"
+        """
+        if model.endswith('-image'):
+            return 't2i'
+        elif model.endswith('-image_edit'):
+            return 'image_edit'
+        elif model.endswith('-video'):
+            return 't2v'
+        else:
+            return 'normal'
+    
+    @staticmethod
+    def clean_model_name(model: str) -> str:
+        """
+        Remove known suffixes from model name.
+        
+        Args:
+            model: Model with suffix (e.g., "qwen-max-thinking")
+            
+        Returns:
+            Base model name (e.g., "qwen-max")
+        """
+        # Remove known suffixes
+        suffixes = ['-search', '-thinking', '-image', '-image_edit', '-video']
+        for suffix in suffixes:
+            if model.endswith(suffix):
+                return model[:-len(suffix)]
+        return model
+    
+    @staticmethod
+    def is_thinking_mode(model: str) -> bool:
+        """Check if model is in thinking mode"""
+        return '-thinking' in model
+    
+    @staticmethod
+    def is_search_mode(model: str) -> bool:
+        """Check if model is in search mode"""
+        return '-search' in model
+    
+    @staticmethod
+    def transform_openai_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Transform OpenAI format messages to Qwen format.
+        
+        Adds required chat_type and extra fields to each message.
+        
+        Args:
+            messages: OpenAI format messages
+            
+        Returns:
+            Qwen format messages with chat_type and extra
+        """
+        qwen_messages = []
+        
+        for msg in messages:
+            qwen_msg = {
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", ""),
+                "chat_type": "text",
+                "extra": {}
+            }
+            qwen_messages.append(qwen_msg)
+        
+        return qwen_messages
+    
+    @staticmethod
+    def map_size_to_aspect_ratio(size: str) -> str:
+        """
+        Map OpenAI size format to Qwen aspect ratio.
+        
+        Args:
+            size: OpenAI size (e.g., "1024x1024")
+            
+        Returns:
+            Qwen aspect ratio (e.g., "1:1")
+        """
+        # Check predefined mappings
+        if size in QwenRequestBuilder.SIZE_MAP:
+            return QwenRequestBuilder.SIZE_MAP[size]
+        
+        # Calculate aspect ratio for custom sizes
+        try:
+            width, height = map(int, size.split('x'))
+            
+            # Calculate GCD for simplification
+            def gcd(a: int, b: int) -> int:
+                while b:
+                    a, b = b, a % b
+                return a
+            
+            divisor = gcd(width, height)
+            aspect_ratio = f"{width // divisor}:{height // divisor}"
+            
+            logger.info(f"Calculated aspect ratio for {size}: {aspect_ratio}")
+            return aspect_ratio
+        except (ValueError, ZeroDivisionError) as e:
+            logger.error(f"Invalid size format: {size}, defaulting to 1:1. Error: {e}")
+            return "1:1"
+    
+    @classmethod
+    def build_text_chat_request(
+        cls,
+        model: str,
+        messages: List[Dict[str, Any]],
+        stream: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Build standard text-to-text chat request.
+        
+        This is the default request type for normal conversations.
+        Includes all required fields: session_id, chat_id, feature_config.
+        
+        Args:
+            model: Model name (e.g., "qwen-max", "qwen-max-thinking")
+            messages: OpenAI format messages
+            stream: Enable streaming response
+            
+        Returns:
+            Properly structured Qwen API request
+        """
+        # Clean model name and detect features
+        clean_model = cls.clean_model_name(model)
+        thinking_enabled = cls.is_thinking_mode(model)
+        
+        # Transform messages to Qwen format
+        qwen_messages = cls.transform_openai_messages(messages)
+        
+        # Build request with ALL required fields
+        request = {
+            "model": clean_model,
+            "messages": qwen_messages,
+            "stream": stream,
+            "incremental_output": True,
+            "chat_type": "normal",
+            "session_id": cls.generate_uuid(),  # CRITICAL: Required UUID
+            "chat_id": cls.generate_uuid(),     # CRITICAL: Required UUID
+            "feature_config": {
+                "output_schema": "phase",
+                "thinking_enabled": thinking_enabled
+            }
+        }
+        
+        logger.info(
+            f"Built text chat request: model={clean_model}, "
+            f"thinking={thinking_enabled}, messages={len(qwen_messages)}"
+        )
+        
+        return request
+    
+    @classmethod
+    def build_image_generation_request(
+        cls,
+        chat_id: str,
+        model: str,
+        prompt: str,
+        size: str = "1024x1024"
+    ) -> Dict[str, Any]:
+        """
+        Build text-to-image generation request.
+        
+        Note: Requires pre-created chat session. Use create_chat_session() first.
+        
+        Args:
+            chat_id: Chat ID from session creation
+            model: Model name
+            prompt: Image generation prompt
+            size: Image size in OpenAI format (e.g., "1024x1024")
+            
+        Returns:
+            Properly structured image generation request
+        """
+        clean_model = cls.clean_model_name(model)
+        aspect_ratio = cls.map_size_to_aspect_ratio(size)
+        
+        request = {
+            "stream": True,
+            "chat_id": chat_id,
+            "model": clean_model,
+            "size": aspect_ratio,
+            "messages": [{
+                "role": "user",
+                "content": prompt or "Generate an image",
+                "files": [],
+                "chat_type": "t2i",
+                "feature_config": {
+                    "output_schema": "phase"
+                }
+            }]
+        }
+        
+        logger.info(
+            f"Built image generation request: chat_id={chat_id}, "
+            f"model={clean_model}, size={aspect_ratio}"
+        )
+        
+        return request
+    
+    @classmethod
+    def build_image_edit_request(
+        cls,
+        chat_id: str,
+        model: str,
+        prompt: str,
+        image_url: str
+    ) -> Dict[str, Any]:
+        """
+        Build image editing request.
+        
+        Note: Requires pre-created chat session with chat_type="image_edit".
+        
+        Args:
+            chat_id: Chat ID from session creation
+            model: Model name
+            prompt: Editing instructions
+            image_url: URL of image to edit
+            
+        Returns:
+            Properly structured image editing request
+        """
+        clean_model = cls.clean_model_name(model)
+        
+        request = {
+            "stream": True,
+            "chat_id": chat_id,
+            "model": clean_model,
+            "messages": [{
+                "role": "user",
+                "content": prompt,
+                "files": [{
+                    "type": "image",
+                    "url": image_url
+                }],
+                "chat_type": "image_edit",
+                "feature_config": {
+                    "output_schema": "phase"
+                }
+            }]
+        }
+        
+        logger.info(
+            f"Built image edit request: chat_id={chat_id}, "
+            f"model={clean_model}, image={image_url[:50]}..."
+        )
+        
+        return request
+    
+    @classmethod
+    def build_chat_session_payload(
+        cls,
+        model: str,
+        chat_type: str = "normal"
+    ) -> Dict[str, Any]:
+        """
+        Build payload for creating new chat session.
+        
+        Required for image generation and editing workflows.
+        
+        Args:
+            model: Model name
+            chat_type: "normal", "t2i", "image_edit", or "t2v"
+            
+        Returns:
+            Chat session creation payload
+        """
+        clean_model = cls.clean_model_name(model)
+        
+        payload = {
+            "title": "New Chat",
+            "models": [clean_model],
+            "chat_mode": "normal",
+            "chat_type": chat_type,
+            "timestamp": cls.get_timestamp()
+        }
+        
+        logger.info(
+            f"Built chat session payload: model={clean_model}, "
+            f"chat_type={chat_type}"
+        )
+        
+        return payload
+    
+    @classmethod
+    def extract_images_from_messages(
+        cls,
+        messages: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Extract image URLs from message history.
+        
+        Looks for:
+        - Markdown images in assistant messages: ![alt](url)
+        - image_url objects in user messages
+        - Direct image fields
+        
+        Args:
+            messages: Conversation messages
+            
+        Returns:
+            List of image URLs (most recent first, max 3)
+        """
+        import re
+        
+        images = []
+        markdown_regex = re.compile(r'!\[.*?\]\((.*?)\)')
+        
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+            
+            # Extract from assistant markdown
+            if role == "assistant" and isinstance(content, str):
+                matches = markdown_regex.findall(content)
+                images.extend(matches)
+            
+            # Extract from user messages
+            elif role == "user":
+                if isinstance(content, str):
+                    matches = markdown_regex.findall(content)
+                    images.extend(matches)
+                elif isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict):
+                            if item.get("type") == "image_url":
+                                url = item.get("image_url", {}).get("url")
+                                if url:
+                                    images.append(url)
+                            elif item.get("type") == "image" and item.get("image"):
+                                images.append(item["image"])
+        
+        # Return last 3 images (most recent)
+        return images[-3:] if images else []
 
 
 class QwenProvider(BaseProvider):
