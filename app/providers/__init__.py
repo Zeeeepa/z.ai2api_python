@@ -9,7 +9,6 @@
 from app.providers.base import BaseProvider, ProviderConfig, provider_registry
 from app.providers.zai_provider import ZAIProvider
 from app.providers.k2think_provider import K2ThinkProvider
-from app.providers.longcat_provider import LongCatProvider
 from app.providers.qwen_provider import QwenProvider
 from app.providers.provider_factory import ProviderFactory, ProviderRouter, get_provider_router, initialize_providers
 
@@ -19,7 +18,6 @@ __all__ = [
     "provider_registry",
     "ZAIProvider",
     "K2ThinkProvider", 
-    "LongCatProvider",
     "QwenProvider",
     "ProviderFactory",
     "ProviderRouter",
