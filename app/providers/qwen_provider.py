@@ -853,8 +853,16 @@ class QwenProvider(BaseProvider):
             "qwen-max-search": "qwen-max",
             "qwen-max-image": "qwen-max",
             "qwen-plus": "qwen-plus",
+            "qwen-plus-latest": "qwen-plus",
             "qwen-turbo": "qwen-turbo",
+            "qwen-turbo-latest": "qwen-turbo",
             "qwen-long": "qwen-long",
+            # Deep research aliases
+            "qwen-deep-research": "qwen-max",
+            "qwen-max-deep-research": "qwen-max",
+            # Code generation models (qwen3-coder series)
+            "qwen3-coder-plus": "qwen-plus",
+            "qwen-coder-plus": "qwen-plus",
         }
     
     def get_supported_models(self) -> List[str]:
@@ -1885,7 +1893,12 @@ class QwenProvider(BaseProvider):
             "qwen-max-latest",
             "qwen-max-0428",
             "qwen-plus-latest",
-            "qwen-turbo-latest"
+            "qwen-turbo-latest",
+            # Deep research aliases (without base prefix)
+            "qwen-deep-research",
+            # Code models
+            "qwen3-coder-plus",
+            "qwen-coder-plus"
         ])
         
         logger.debug(f"Generated {len(models)} model variants")
