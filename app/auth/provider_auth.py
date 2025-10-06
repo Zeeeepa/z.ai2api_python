@@ -272,101 +272,235 @@ class QwenAuth(ProviderAuth):
 
 
 class ZAIAuth(ProviderAuth):
-    """Z.AI provider authentication"""
+    """Z.AI provider authentication using Playwright"""
     
     async def login(self) -> Dict[str, Any]:
-        """Login to Z.AI and extract token"""
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-            # Get initial page
-            await client.get(self.base_url)
-            
-            # Login
-            login_data = {
-                "email": self.email,
-                "password": self.password
-            }
-            
-            headers = {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-            
-            login_response = await client.post(
-                self.login_url,
-                json=login_data,
-                headers=headers
+        """
+        Login to Z.AI using Playwright and extract authentication data.
+        
+        Returns:
+            Dict with cookies, token, and extra data
+        """
+        from playwright.async_api import async_playwright
+        
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
+                user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
             )
+            page = await context.new_page()
             
-            if login_response.status_code not in [200, 201]:
-                raise Exception(f"Login failed with status {login_response.status_code}")
-            
-            # Extract token from response
-            response_data = login_response.json()
-            token = response_data.get("token") or response_data.get("access_token")
-            
-            # Extract cookies
-            cookies = {}
-            for cookie_name, cookie_value in client.cookies.items():
-                cookies[cookie_name] = cookie_value
-            
-            logger.info(f"Z.AI: Extracted token and {len(cookies)} cookies")
-            
-            return {
-                "cookies": cookies,
-                "token": token,
-                "extra": {}
-            }
+            try:
+                logger.info(f"🌐 ZAI: Navigating to {self.login_url}")
+                await page.goto(self.login_url, wait_until='networkidle', timeout=30000)
+                
+                # Wait for login form
+                logger.debug("🔐 ZAI: Waiting for login form")
+                await page.wait_for_selector('input[type="email"], input[type="text"], input[name="email"]', timeout=10000)
+                
+                # Fill in credentials
+                logger.debug("✏️ ZAI: Filling credentials")
+                email_input = await page.query_selector('input[type="email"], input[type="text"], input[name="email"]')
+                if email_input:
+                    await email_input.fill(self.email)
+                else:
+                    raise Exception("Could not find email input field")
+                
+                password_input = await page.query_selector('input[type="password"], input[name="password"]')
+                if password_input:
+                    await password_input.fill(self.password)
+                else:
+                    raise Exception("Could not find password input field")
+                
+                # Click login button
+                logger.debug("👆 ZAI: Clicking login button")
+                submit_button = await page.query_selector('button[type="submit"], button:has-text("登录"), button:has-text("Login"), button:has-text("Sign in")')
+                if submit_button:
+                    await submit_button.click()
+                else:
+                    # Try pressing Enter
+                    await password_input.press('Enter')
+                
+                # Wait for successful login
+                logger.debug("⏳ ZAI: Waiting for login to complete")
+                try:
+                    # Wait for URL change or network idle
+                    await page.wait_for_url('**/chat**', timeout=20000)
+                    logger.info("✅ ZAI: Login successful (URL changed to chat)")
+                except:
+                    try:
+                        await page.wait_for_load_state('networkidle', timeout=20000)
+                        logger.info("✅ ZAI: Login successful (network idle)")
+                    except:
+                        logger.warning("⚠️ ZAI: Timeout waiting for login, checking auth data anyway")
+                
+                # Extract authentication token from localStorage or API response
+                logger.debug("🔑 ZAI: Extracting authentication token")
+                auth_token = None
+                
+                # Try to get token from localStorage
+                for attempt in range(3):
+                    auth_token = await page.evaluate('''() => {
+                        return localStorage.getItem('token') || 
+                               localStorage.getItem('auth_token') || 
+                               localStorage.getItem('access_token') ||
+                               localStorage.getItem('authToken');
+                    }''')
+                    if auth_token:
+                        logger.info(f"✅ ZAI: Found auth token in localStorage (attempt {attempt + 1})")
+                        break
+                    await asyncio.sleep(1)
+                
+                # If no localStorage token, try to extract from API call response
+                if not auth_token:
+                    logger.debug("🔍 ZAI: Checking for token in API responses")
+                    # Get /api/v1/auths/ endpoint
+                    try:
+                        api_response = await page.goto(
+                            f"{self.base_url}/api/v1/auths/",
+                            wait_until='networkidle',
+                            timeout=10000
+                        )
+                        if api_response and api_response.ok:
+                            response_json = await api_response.json()
+                            auth_token = response_json.get('token')
+                            logger.info(f"✅ ZAI: Found auth token from /api/v1/auths/")
+                    except Exception as e:
+                        logger.debug(f"ZAI: Could not get token from API: {e}")
+                
+                # Extract all cookies
+                logger.debug("🍪 ZAI: Extracting cookies")
+                cookies = await context.cookies()
+                cookie_dict = {}
+                for cookie in cookies:
+                    cookie_dict[cookie['name']] = cookie['value']
+                
+                logger.info(f"📊 ZAI: auth_token={bool(auth_token)}, total_cookies={len(cookie_dict)}")
+                
+                return {
+                    "cookies": cookie_dict,
+                    "token": auth_token,
+                    "extra": {
+                        "user_agent": context._impl_obj._options.get("user_agent")
+                    }
+                }
+                
+            except Exception as e:
+                logger.error(f"❌ ZAI Playwright login failed: {e}", exc_info=True)
+                raise
+            finally:
+                await browser.close()
 
 
 class K2ThinkAuth(ProviderAuth):
-    """K2Think provider authentication"""
+    """K2Think provider authentication using Playwright"""
     
     async def login(self) -> Dict[str, Any]:
-        """Login to K2Think and extract session"""
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-            # Get initial page
-            await client.get(self.base_url)
-            
-            # Login
-            login_data = {
-                "email": self.email,
-                "password": self.password
-            }
-            
-            headers = {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-            
-            login_response = await client.post(
-                self.login_url,
-                json=login_data,
-                headers=headers
+        """
+        Login to K2Think using Playwright and extract session data.
+        
+        Returns:
+            Dict with cookies, token, and extra data
+        """
+        from playwright.async_api import async_playwright
+        
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
+                user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
             )
+            page = await context.new_page()
             
-            if login_response.status_code not in [200, 201, 302]:
-                raise Exception(f"Login failed with status {login_response.status_code}")
-            
-            # Extract cookies
-            cookies = {}
-            for cookie_name, cookie_value in client.cookies.items():
-                cookies[cookie_name] = cookie_value
-            
-            # Extract token if available
-            token = None
             try:
-                response_data = login_response.json()
-                token = response_data.get("token") or response_data.get("sessionId")
-            except:
-                pass
-            
-            logger.info(f"K2Think: Extracted {len(cookies)} cookies, token: {bool(token)}")
-            
-            return {
-                "cookies": cookies,
-                "token": token,
-                "extra": {}
-            }
+                logger.info(f"🌐 K2Think: Navigating to {self.login_url}")
+                await page.goto(self.login_url, wait_until='networkidle', timeout=30000)
+                
+                # Wait for login form
+                logger.debug("🔐 K2Think: Waiting for login form")
+                await page.wait_for_selector('input[type="email"], input[type="text"], input[name="email"]', timeout=10000)
+                
+                # Fill in credentials
+                logger.debug("✏️ K2Think: Filling credentials")
+                email_input = await page.query_selector('input[type="email"], input[type="text"], input[name="email"]')
+                if email_input:
+                    await email_input.fill(self.email)
+                else:
+                    raise Exception("Could not find email input field")
+                
+                password_input = await page.query_selector('input[type="password"], input[name="password"]')
+                if password_input:
+                    await password_input.fill(self.password)
+                else:
+                    raise Exception("Could not find password input field")
+                
+                # Click login button
+                logger.debug("👆 K2Think: Clicking login button")
+                submit_button = await page.query_selector('button[type="submit"], button:has-text("登录"), button:has-text("Login"), button:has-text("Sign in")')
+                if submit_button:
+                    await submit_button.click()
+                else:
+                    # Try pressing Enter
+                    await password_input.press('Enter')
+                
+                # Wait for successful login
+                logger.debug("⏳ K2Think: Waiting for login to complete")
+                try:
+                    # Wait for URL change or network idle
+                    await page.wait_for_url('**/chat**', timeout=20000)
+                    logger.info("✅ K2Think: Login successful (URL changed to chat)")
+                except:
+                    try:
+                        await page.wait_for_load_state('networkidle', timeout=20000)
+                        logger.info("✅ K2Think: Login successful (network idle)")
+                    except:
+                        logger.warning("⚠️ K2Think: Timeout waiting for login, checking auth data anyway")
+                
+                # Extract authentication token from localStorage or sessionStorage
+                logger.debug("🔑 K2Think: Extracting authentication token")
+                auth_token = None
+                
+                # Try to get token from localStorage/sessionStorage
+                for attempt in range(3):
+                    auth_token = await page.evaluate('''() => {
+                        return localStorage.getItem('token') || 
+                               localStorage.getItem('auth_token') || 
+                               localStorage.getItem('access_token') ||
+                               localStorage.getItem('sessionId') ||
+                               sessionStorage.getItem('token') ||
+                               sessionStorage.getItem('auth_token') ||
+                               sessionStorage.getItem('sessionId');
+                    }''')
+                    if auth_token:
+                        logger.info(f"✅ K2Think: Found auth token (attempt {attempt + 1})")
+                        break
+                    await asyncio.sleep(1)
+                
+                # Extract all cookies
+                logger.debug("🍪 K2Think: Extracting cookies")
+                cookies = await context.cookies()
+                cookie_dict = {}
+                for cookie in cookies:
+                    cookie_dict[cookie['name']] = cookie['value']
+                
+                # K2Think might use session cookies for auth
+                session_cookie = cookie_dict.get('session') or cookie_dict.get('connect.sid') or cookie_dict.get('sessionid')
+                
+                logger.info(f"📊 K2Think: auth_token={bool(auth_token)}, session_cookie={bool(session_cookie)}, total_cookies={len(cookie_dict)}")
+                
+                return {
+                    "cookies": cookie_dict,
+                    "token": auth_token or session_cookie,  # Use session cookie as token if no explicit token
+                    "extra": {
+                        "user_agent": context._impl_obj._options.get("user_agent"),
+                        "session_cookie": session_cookie
+                    }
+                }
+                
+            except Exception as e:
+                logger.error(f"❌ K2Think Playwright login failed: {e}", exc_info=True)
+                raise
+            finally:
+                await browser.close()
 
 
 # Factory for creating auth instances

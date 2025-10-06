@@ -1,0 +1,29 @@
+{
+  "providers": [
+    {
+      "name": "zai",
+      "baseUrl": "https://chat.z.ai",
+      "loginUrl": "https://chat.z.ai/login",
+      "chatUrl": "https://chat.z.ai/chat",
+      "email": "developer@pixelium.uk",
+      "password": "developer123?"
+    },
+    {
+      "name": "k2think",
+      "baseUrl": "https://www.k2think.ai",
+      "loginUrl": "https://www.k2think.ai/login",
+      "chatUrl": "https://www.k2think.ai/chat",
+      "email": "developer@pixelium.uk",
+      "password": "developer123?"
+    },
+    {
+      "name": "qwen",
+      "baseUrl": "https://chat.qwen.ai",
+      "loginUrl": "https://chat.qwen.ai/login",
+      "chatUrl": "https://chat.qwen.ai/chat",
+      "email": "developer@pixelium.uk",
+      "password": "developer1?"
+    }
+  ]
+}
+
