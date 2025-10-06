@@ -14,6 +14,7 @@ from app.providers.base import BaseProvider, provider_registry
 from app.providers.zai_provider import ZAIProvider
 from app.providers.k2think_provider import K2ThinkProvider
 from app.providers.qwen_provider import QwenProvider
+from app.providers.grok_provider import GrokProvider
 from app.models.schemas import OpenAIRequest
 from app.core.config import settings
 from app.utils.logger import get_logger
@@ -80,6 +81,21 @@ class ProviderFactory:
                 qwen_provider,
                 qwen_provider.get_supported_models()
             )
+            
+            # 注册 Grok 提供商（如果配置存在）
+            grok_config = provider_configs.get("grok")
+            if grok_config and grok_config.get("enabled", False):
+                try:
+                    logger.info("🤖 Initializing Grok provider with automated authentication")
+                    grok_provider = GrokProvider(grok_config)
+                    provider_registry.register(
+                        grok_provider,
+                        grok_provider.get_supported_models()
+                    )
+                    logger.info("✅ Grok provider initialized successfully")
+                except Exception as e:
+                    logger.error(f"❌ Failed to initialize Grok provider: {e}")
+                    logger.info("⚠️ Continuing without Grok provider")
             
             self._initialized = True
             logger.info(f"✅ Initialized {len(provider_registry.list_providers())} providers")

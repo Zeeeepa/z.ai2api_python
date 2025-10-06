@@ -178,3 +178,8 @@ dmypy.json
 cython_debug/
 .sessions/
 config/providers.json
+
+# Grok provider data
+data/grok_tokens.json
+data/grok_browser_data/
+
