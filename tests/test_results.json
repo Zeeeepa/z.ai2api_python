@@ -1,0 +1,77 @@
+{
+  "timestamp": "2025-10-06 13:24:38",
+  "summary": {
+    "total": 10,
+    "successes": 6,
+    "failures": 4,
+    "concurrent_time": 8.798672437667847
+  },
+  "results": [
+    {
+      "model": "GLM-4.5",
+      "status": "failed",
+      "elapsed": 9.16,
+      "error": "Error code: 500 - {'detail': 'zai  \u9519\u8bef: Z.AI API \u9519\u8bef: 400'}"
+    },
+    {
+      "model": "GLM-4.6",
+      "status": "failed",
+      "elapsed": 8.47,
+      "error": "Error code: 500 - {'detail': 'zai  \u9519\u8bef: Z.AI API \u9519\u8bef: 400'}"
+    },
+    {
+      "model": "GLM-4.5-Air",
+      "status": "failed",
+      "elapsed": 8.87,
+      "error": "Error code: 500 - {'detail': 'zai  \u9519\u8bef: Z.AI API \u9519\u8bef: 400'}"
+    },
+    {
+      "model": "MBZUAI-IFM/K2-Think",
+      "status": "success",
+      "elapsed": 3.25,
+      "response": "K2-Think",
+      "tokens": 0
+    },
+    {
+      "model": "qwen-turbo",
+      "status": "success",
+      "elapsed": 0.7,
+      "response": "(empty)",
+      "tokens": 0
+    },
+    {
+      "model": "qwen-plus",
+      "status": "success",
+      "elapsed": 0.67,
+      "response": "(empty)",
+      "tokens": 0
+    },
+    {
+      "model": "qwen-max",
+      "status": "success",
+      "elapsed": 0.68,
+      "response": "(empty)",
+      "tokens": 0
+    },
+    {
+      "model": "qwen-turbo",
+      "status": "success",
+      "elapsed": 0.7,
+      "response": "(empty)",
+      "tokens": 0
+    },
+    {
+      "model": "MBZUAI-IFM/K2-Think",
+      "status": "success",
+      "elapsed": 2.57,
+      "response": "Hello! How can I assist you today?",
+      "tokens": 0
+    },
+    {
+      "model": "GLM-4.6",
+      "status": "failed",
+      "elapsed": 8.8,
+      "error": "Error code: 500 - {'detail': 'zai  \u9519\u8bef: Z.AI API \u9519\u8bef: 400'}"
+    }
+  ]
+}
