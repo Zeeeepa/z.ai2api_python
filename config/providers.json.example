@@ -36,7 +36,15 @@
             "password": "your-password",
             "enabled": false,
             "note": "LongCat requires LONGCAT_PASSPORT_TOKEN environment variable"
+        },
+        {
+            "name": "grok",
+            "loginUrl": "https://accounts.x.ai/sign-in?redirect=grok-com&email=true",
+            "chatUrl": "https://grok.com/chat",
+            "email": "developer@pixelium.uk",
+            "password": "developer123??",
+            "enabled": true,
+            "note": "Grok provider with automated authentication via Playwright"
         }
     ]
 }
-
