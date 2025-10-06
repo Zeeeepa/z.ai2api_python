@@ -110,7 +110,7 @@ class ZAIProvider(BaseProvider):
             token_pool.mark_token_failure(token, error)
     
     async def transform_request(self, request: OpenAIRequest) -> Dict[str, Any]:
-        """转换OpenAI请求为Z.AI格式（简化版，基于 Flask 实现）"""
+        """转换OpenAI请求为Z.AI格式"""
         self.logger.info(f"🔄 转换 OpenAI 请求到 Z.AI 格式: {request.model}")
         
         # 获取认证令牌
@@ -142,34 +142,103 @@ class ZAIProvider(BaseProvider):
         requested_model = request.model
         is_thinking = "-thinking" in requested_model.casefold()
         is_search = "-search" in requested_model.casefold()
+        is_air = "-air" in requested_model.casefold()
         
-        # 获取上游模型名称（使用用户友好名称）
-        upstream_model = self.model_mapping.get(requested_model, "GLM-4.5")
+        # 获取上游模型ID
+        upstream_model_id = self.model_mapping.get(requested_model, "0727-360B-API")
         
-        # 生成 chat_id
+        # 构建MCP服务器列表
+        mcp_servers = []
+        if is_search and "-4.5" in requested_model:
+            mcp_servers.append("deep-web-search")
+            self.logger.info("🔍 检测到搜索模型，添加 deep-web-search MCP 服务器")
+        
+        # 构建上游请求体
         chat_id = generate_uuid()
         
-        # 构建简化的请求体（类似 Flask 实现）
         body = {
-            "model": upstream_model,
+            "stream": True,  # 总是使用流式
+            "model": upstream_model_id,
             "messages": messages,
-            "stream": request.stream if request.stream is not None else True,
+            "params": {},
+            "features": {
+                "image_generation": False,
+                "web_search": is_search,
+                "auto_web_search": is_search,
+                "preview_mode": False,
+                "flags": [],
+                "features": [
+                    {
+                        "type": "mcp",
+                        "server": "vibe-coding",
+                        "status": "hidden"
+                    },
+                    {
+                        "type": "mcp",
+                        "server": "ppt-maker",
+                        "status": "hidden"
+                    },
+                    {
+                        "type": "mcp",
+                        "server": "image-search",
+                        "status": "hidden"
+                    },
+                    {
+                        "type": "mcp",
+                        "server": "deep-research",
+                        "status": "hidden"
+                    },
+                    {
+                        "type": "tool_selector",
+                        "server": "tool_selector",
+                        "status": "hidden"
+                    },
+                    {
+                        "type": "mcp",
+                        "server": "advanced-search",
+                        "status": "hidden"
+                    }
+                ],
+                "enable_thinking": is_thinking,
+            },
+            "background_tasks": {
+                "title_generation": False,
+                "tags_generation": False,
+            },
+            "mcp_servers": mcp_servers,
+            "variables": {
+                "{{USER_NAME}}": "Guest",
+                "{{USER_LOCATION}}": "Unknown",
+                "{{CURRENT_DATETIME}}": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "{{CURRENT_DATE}}": datetime.now().strftime("%Y-%m-%d"),
+                "{{CURRENT_TIME}}": datetime.now().strftime("%H:%M:%S"),
+                "{{CURRENT_WEEKDAY}}": datetime.now().strftime("%A"),
+                "{{CURRENT_TIMEZONE}}": "Asia/Shanghai",
+                "{{USER_LANGUAGE}}": "zh-CN",
+            },
+            "model_item": {
+                "id": upstream_model_id,
+                "name": requested_model,
+                "owned_by": "z.ai"
+            },
             "chat_id": chat_id,
             "id": generate_uuid(),
-            "features": {
-                "enable_thinking": is_thinking,
-            }
         }
         
-        # 添加温度参数（如果设置）
+        # 处理工具支持
+        if settings.TOOL_SUPPORT and not is_thinking and request.tools:
+            body["tools"] = request.tools
+            self.logger.info(f"启用工具支持: {len(request.tools)} 个工具")
+        else:
+            body["tools"] = None
+        
+        # 处理其他参数
         if request.temperature is not None:
-            body["temperature"] = request.temperature
-        
-        # 添加 max_tokens（如果设置）
+            body["params"]["temperature"] = request.temperature
         if request.max_tokens is not None:
-            body["max_tokens"] = request.max_tokens
+            body["params"]["max_tokens"] = request.max_tokens
         
-        # 构建请求头（简化版）
+        # 构建请求头
         headers = get_zai_dynamic_headers(chat_id)
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -177,10 +246,8 @@ class ZAIProvider(BaseProvider):
         # 存储当前token用于错误处理
         self._current_token = token
 
-        self.logger.debug(f"📤 请求体: model={upstream_model}, thinking={is_thinking}, stream={body['stream']}")
-
         return {
-            "url": self.chat_endpoint,  # 使用简化端点
+            "url": self.config.api_endpoint,
             "headers": headers,
             "body": body,
             "token": token,
