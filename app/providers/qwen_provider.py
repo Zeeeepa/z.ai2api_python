@@ -1074,3 +1074,200 @@ class QwenProvider(BaseProvider):
         except Exception as e:
             logger.error(f"Video generation failed: {e}", exc_info=True)
             raise
+    
+    def get_supported_models(self) -> list[str]:
+        """
+        Get expanded list of supported model variants
+        
+        Returns all base models with their feature suffixes:
+        - base model (text chat)
+        - -thinking (reasoning mode)
+        - -search (web search)
+        - -image (text-to-image)
+        - -image_edit (image editing)
+        - -video (text-to-video)
+        - -deep-research (comprehensive research)
+        
+        Returns:
+            List of all model variant names
+        """
+        base_models = [
+            "qwen-max",
+            "qwen-plus",
+            "qwen-turbo",
+            "qwen-long"
+        ]
+        
+        suffixes = [
+            "",  # Base model
+            "-thinking",
+            "-search",
+            "-image",
+            "-image_edit",
+            "-video",
+            "-deep-research"
+        ]
+        
+        models = []
+        for base in base_models:
+            for suffix in suffixes:
+                models.append(f"{base}{suffix}")
+        
+        # Add aliases
+        models.extend([
+            "qwen-max-latest",
+            "qwen-max-0428",
+            "qwen-plus-latest",
+            "qwen-turbo-latest"
+        ])
+        
+        logger.debug(f"Generated {len(models)} model variants")
+        return models
+    
+    async def deep_research(
+        self,
+        query: str,
+        model: str = "qwen-max",
+        max_iterations: int = 3
+    ) -> Dict[str, Any]:
+        """
+        Perform deep research on a query with citations
+        
+        Args:
+            query: Research question
+            model: Model to use
+            max_iterations: Maximum research iterations
+            
+        Returns:
+            Research results with citations and sources
+        """
+        import uuid
+        
+        try:
+            # Clean model name
+            base_model = model.replace('-deep-research', '')
+            
+            # Create chat session for deep research
+            chat_id = await self.create_chat_session(base_model, chat_type="deep_research")
+            if not chat_id:
+                raise Exception("Failed to create chat session for deep research")
+            
+            # Build request
+            request_body = {
+                "model": base_model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": query,
+                        "chat_type": "deep_research",
+                        "extra": {},
+                        "feature_config": {
+                            "output_schema": "phase",
+                            "thinking_enabled": True,
+                            "thinking_budget": 10000
+                        }
+                    }
+                ],
+                "stream": True,
+                "incremental_output": True,
+                "chat_type": "deep_research",
+                "session_id": str(uuid.uuid4()),
+                "chat_id": chat_id,
+                "parent_id": None,
+                "chat_mode": "normal",
+                "timestamp": int(time.time() * 1000),
+                "feature_config": {
+                    "output_schema": "phase",
+                    "thinking_enabled": True,
+                    "thinking_budget": 10000
+                },
+                "research_config": {
+                    "max_iterations": max_iterations,
+                    "include_citations": True
+                }
+            }
+            
+            # Get headers
+            headers = await self.get_auth_headers()
+            
+            logger.info(f"Starting deep research: '{query[:50]}...' max_iterations={max_iterations}")
+            
+            # Make request with extended timeout
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                response = await client.post(
+                    f"{self.CHAT_COMPLETIONS_URL}?chat_id={chat_id}",
+                    json=request_body,
+                    headers=headers
+                )
+                
+                if response.status_code != 200:
+                    raise Exception(f"Deep research failed: {response.status_code} - {response.text}")
+                
+                # Parse streaming response
+                research_content = []
+                citations = []
+                thinking_content = []
+                
+                buffer = ""
+                async for chunk in response.aiter_text():
+                    buffer += chunk
+                    
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        
+                        if not line or not line.startswith("data:"):
+                            continue
+                        
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        
+                        try:
+                            data = json.loads(data_str)
+                            
+                            # Extract different content types
+                            phase_type = data.get("type", "")
+                            content = data.get("data", {}).get("content", "")
+                            
+                            if phase_type == "thinking":
+                                # Thinking/reasoning phase
+                                if content:
+                                    thinking_content.append(content)
+                            elif phase_type == "research" or phase_type == "answer":
+                                # Main research content
+                                if content:
+                                    research_content.append(content)
+                            
+                            # Extract citations
+                            if "citation" in data or "[citation:" in content:
+                                import re
+                                citation_matches = re.findall(r'\[citation:([^\]]+)\]', content)
+                                for citation in citation_matches:
+                                    if citation not in citations:
+                                        citations.append(citation)
+                                        logger.debug(f"Found citation: {citation}")
+                            
+                        except json.JSONDecodeError:
+                            continue
+                        except Exception as e:
+                            logger.debug(f"Error parsing chunk: {e}")
+                            continue
+                
+                if not research_content:
+                    raise Exception("No research content found in response")
+                
+                # Return structured research results
+                return {
+                    "created": int(time.time()),
+                    "query": query,
+                    "answer": "".join(research_content),
+                    "thinking": "".join(thinking_content) if thinking_content else None,
+                    "citations": citations,
+                    "iterations": max_iterations,
+                    "chat_id": chat_id
+                }
+                
+        except Exception as e:
+            logger.error(f"Deep research failed: {e}", exc_info=True)
+            raise

@@ -183,3 +183,52 @@ async def generate_videos(request: VideoGenerationRequest, authorization: str = 
         logger.error(f"❌ Video generation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Video generation error: {str(e)}")
 
+
+class DeepResearchRequest(BaseModel):
+    """Deep research request"""
+    query: str = Field(..., description="Research question")
+    model: Optional[str] = Field(default="qwen-max-deep-research", description="Model to use")
+    max_iterations: Optional[int] = Field(default=3, description="Maximum research iterations")
+
+
+@router.post("/v1/research/deep")
+async def deep_research(request: DeepResearchRequest, authorization: str = Header(...)):
+    """
+    Perform deep research on a query
+    
+    Qwen-specific endpoint for comprehensive research with citations
+    """
+    logger.info(f"🔬 Deep research request: '{request.query[:50]}...' max_iterations={request.max_iterations}")
+    
+    try:
+        # Validate auth
+        if not settings.SKIP_AUTH_TOKEN:
+            if not authorization.startswith("Bearer "):
+                raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+            
+            api_key = authorization[7:]
+            if api_key != settings.AUTH_TOKEN:
+                raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        # Get provider
+        provider_router = get_provider_router()
+        provider = provider_router._get_provider_for_model(request.model or "qwen-max-deep-research")
+        
+        if not provider:
+            raise HTTPException(status_code=404, detail=f"Provider not found for model: {request.model}")
+        
+        # Perform deep research
+        result = await provider.deep_research(
+            query=request.query,
+            model=request.model or "qwen-max-deep-research",
+            max_iterations=request.max_iterations
+        )
+        
+        logger.info("✅ Deep research successful")
+        return JSONResponse(content=result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Deep research failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Deep research error: {str(e)}")

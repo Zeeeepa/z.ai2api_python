@@ -155,12 +155,24 @@ class FeatureTester:
         print("="*70)
         
         try:
-            # This will be implemented in Phase 4
-            print("⏳ Image generation endpoint not yet implemented")
-            return None  # Pending
+            result = await self.provider.generate_image(
+                prompt="A serene landscape with mountains",
+                model="qwen-max-image",
+                size="1024x1024",
+                n=1
+            )
+            
+            if result and "data" in result and result["data"]:
+                image_url = result["data"][0].get("url", "")
+                print(f"✅ Image generation works! URL: {image_url[:60]}...")
+                return True
+            else:
+                print(f"❌ Image generation returned invalid response")
+                return False
             
         except Exception as e:
             print(f"❌ Image generation failed: {e}")
+            logger.error(f"Image generation test failed", exc_info=True)
             return False
     
     async def test_image_editing(self) -> bool:
@@ -200,12 +212,24 @@ class FeatureTester:
         print("="*70)
         
         try:
-            # This will be implemented in Phase 8
-            print("⏳ Deep research mode not yet implemented")
-            return None  # Pending
+            result = await self.provider.deep_research(
+                query="What are the latest developments in AI in 2024?",
+                model="qwen-max-deep-research",
+                max_iterations=2
+            )
+            
+            if result and "answer" in result:
+                print(f"✅ Deep research works!")
+                print(f"Answer preview: {result['answer'][:100]}...")
+                print(f"Citations found: {len(result.get('citations', []))}")
+                return True
+            else:
+                print(f"❌ Deep research returned invalid response")
+                return False
             
         except Exception as e:
             print(f"❌ Deep research failed: {e}")
+            logger.error(f"Deep research test failed", exc_info=True)
             return False
     
     async def test_session_creation(self) -> bool:
@@ -326,4 +350,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
