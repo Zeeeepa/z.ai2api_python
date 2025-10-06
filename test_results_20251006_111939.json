@@ -1,0 +1,75 @@
+{
+  "timestamp": "2025-10-06T11:18:53.582008",
+  "providers": {
+    "qwen": {
+      "status": "success",
+      "total_models": 32,
+      "models_tested": [
+        {
+          "model": "qwen-max",
+          "status": "success",
+          "response": "",
+          "response_valid": false,
+          "model_name_mentioned": false
+        },
+        {
+          "model": "qwen-max-thinking",
+          "status": "success",
+          "response": "",
+          "response_valid": false,
+          "model_name_mentioned": false
+        },
+        {
+          "model": "qwen-max-search",
+          "status": "success",
+          "response": "",
+          "response_valid": false,
+          "model_name_mentioned": false
+        },
+        {
+          "model": "qwen-plus",
+          "status": "success",
+          "response": "",
+          "response_valid": false,
+          "model_name_mentioned": false
+        },
+        {
+          "model": "qwen-turbo",
+          "status": "success",
+          "response": "",
+          "response_valid": false,
+          "model_name_mentioned": false
+        },
+        {
+          "model": "qwen-long",
+          "status": "success",
+          "response": "",
+          "response_valid": false,
+          "model_name_mentioned": false
+        }
+      ],
+      "authentication": "success"
+    },
+    "zai": {
+      "status": "error",
+      "error": "ZAIProvider.__init__() takes 1 positional argument but 2 were given",
+      "models_tested": []
+    },
+    "k2think": {
+      "status": "error",
+      "error": "K2ThinkProvider.__init__() takes 1 positional argument but 2 were given",
+      "models_tested": []
+    },
+    "longcat": {
+      "status": "error",
+      "error": "LongCatProvider.__init__() takes 1 positional argument but 2 were given",
+      "models_tested": []
+    }
+  },
+  "summary": {
+    "total_tests": 6,
+    "passed": 6,
+    "failed": 0,
+    "errors": []
+  }
+}

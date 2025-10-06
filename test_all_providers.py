@@ -51,8 +51,12 @@ class ProviderTester:
             
             print(f"📧 Using credentials: {email[:3]}***@{email.split('@')[1]}")
             
-            # Initialize provider
+            # Initialize provider with correct camelCase keys
             auth_config = {
+                'name': 'qwen',
+                'baseUrl': 'https://chat.qwen.ai',
+                'loginUrl': 'https://chat.qwen.ai/login',
+                'chatUrl': 'https://chat.qwen.ai/chat',
                 'email': email,
                 'password': password
             }
@@ -413,4 +417,3 @@ async def main():
 if __name__ == "__main__":
     exit_code = asyncio.run(main())
     sys.exit(exit_code)
-

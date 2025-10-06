@@ -6,6 +6,7 @@ Provider Authentication Manager
 Handles automatic login and session management for all providers
 """
 
+import asyncio
 import httpx
 import json
 from typing import Dict, Optional, Any

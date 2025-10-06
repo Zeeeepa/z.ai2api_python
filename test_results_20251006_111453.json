@@ -1,0 +1,31 @@
+{
+  "timestamp": "2025-10-06T11:14:53.253854",
+  "providers": {
+    "qwen": {
+      "status": "error",
+      "error": "'baseUrl'",
+      "models_tested": []
+    },
+    "zai": {
+      "status": "error",
+      "error": "ZAIProvider.__init__() takes 1 positional argument but 2 were given",
+      "models_tested": []
+    },
+    "k2think": {
+      "status": "error",
+      "error": "K2ThinkProvider.__init__() takes 1 positional argument but 2 were given",
+      "models_tested": []
+    },
+    "longcat": {
+      "status": "error",
+      "error": "LongCatProvider.__init__() takes 1 positional argument but 2 were given",
+      "models_tested": []
+    }
+  },
+  "summary": {
+    "total_tests": 0,
+    "passed": 0,
+    "failed": 0,
+    "errors": []
+  }
+}
