@@ -169,6 +169,7 @@ class Settings(BaseSettings):
         }
 
     # Server Configuration
+    HOST: str = os.getenv("HOST", "0.0.0.0")
     LISTEN_PORT: int = int(os.getenv("LISTEN_PORT", "8080"))
     DEBUG_LOGGING: bool = os.getenv("DEBUG_LOGGING", "true").lower() == "true"
     SERVICE_NAME: str = os.getenv("SERVICE_NAME", "z-ai2api-server")

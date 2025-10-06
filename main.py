@@ -4,10 +4,12 @@
 import os
 import sys
 import psutil
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import __version__
 from app.core.config import settings
 from app.core import openai
 from app.core import image_endpoints
@@ -72,6 +74,7 @@ async def root():
 
 
 def run_server():
+    """Run the Granian server"""
     service_name = settings.SERVICE_NAME
 
     logger.info(f"🚀 启动 {service_name} 服务...")
@@ -97,4 +100,6 @@ def run_server():
 
 
 if __name__ == "__main__":
-    run_server()
+    # When run directly, use the CLI module for enhanced startup
+    from app.cli import main as cli_main
+    cli_main()
