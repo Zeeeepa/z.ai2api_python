@@ -43,8 +43,8 @@
 ### Prerequisites
 
 - Python 3.10+
-- Docker & Docker Compose (for container deployment)
 - Provider credentials (Z.AI, K2Think, Qwen)
+- (Optional) Cloudflare account for FlareProx unlimited scalability
 
 ### Installation
 
@@ -60,11 +60,17 @@ pip install -e .
 cp .env.example .env
 # Edit .env and add your credentials
 
-# Start server
+# Start server (that's it!)
 python main.py
 ```
 
-Server starts at `http://localhost:8080`
+**✅ FlareProx auto-initializes on startup if credentials are configured!**
+
+Server starts at `http://localhost:8080` with automatic:
+- ✅ Provider initialization
+- ✅ FlareProx proxy creation (if enabled)
+- ✅ Intelligent load balancing
+- ✅ Auto-scaling based on traffic
 
 ### Configuration
 
@@ -130,13 +136,15 @@ FlareProx enables **unlimited scalability** by routing requests through Cloudfla
 
 ### Setup FlareProx
 
+**FlareProx is now AUTOMATIC! Just configure and start!**
+
 1. **Get Cloudflare Credentials**:
    - Sign up at [cloudflare.com](https://cloudflare.com)
    - Create API token: [https://dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
    - Use "Edit Cloudflare Workers" template
    - Copy token and Account ID
 
-2. **Configure Environment**:
+2. **Configure .env**:
 ```env
 FLAREPROX_ENABLED=true
 CLOUDFLARE_API_TOKEN=your_token_here
@@ -145,13 +153,24 @@ FLAREPROX_PROXY_COUNT=3  # Number of proxy endpoints
 FLAREPROX_AUTO_ROTATE=true
 ```
 
-3. **Create Proxies**:
+3. **Start Server** (FlareProx auto-initializes!):
 ```bash
-# Create 3 proxy endpoints
-python flareprox.py create --count 3
+python main.py
+```
 
-# List active proxies
+That's it! FlareProx will:
+- ✅ Auto-create proxy workers on startup
+- ✅ Load balance across all proxies
+- ✅ Auto-rotate every 100 requests
+- ✅ Scale automatically with traffic
+
+**Optional Manual Management**:
+```bash
+# View active proxies
 python flareprox.py list
+
+# Create additional proxies
+python flareprox.py create --count 5
 
 # Cleanup all proxies
 python flareprox.py cleanup
@@ -369,4 +388,3 @@ This project is for educational and research purposes. Ensure you comply with pr
 ⭐ Star this repo if you find it useful!
 
 </div>
-

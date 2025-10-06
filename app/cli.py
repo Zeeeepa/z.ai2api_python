@@ -26,6 +26,7 @@ from app.core.config import settings
 from app.providers.base import provider_registry
 from app.providers import initialize_providers
 from app.utils.logger import get_logger
+from app.utils.flareprox_manager import get_flareprox_manager, initialize_flareprox
 
 logger = get_logger()
 
@@ -110,11 +111,34 @@ class CLIDisplay:
                 padding=(0, 2)
             )
             self.console.print(panel)
+            
+            # Show FlareProx status if enabled
+            flareprox = get_flareprox_manager()
+            stats = flareprox.get_stats()
+            if stats["enabled"] and stats["initialized"]:
+                self.console.print(f"\n[bold yellow]🔥 FlareProx Status[/bold yellow]")
+                flareprox_info = [
+                    f"Status: [green]Active[/green]",
+                    f"Proxies: {stats['proxy_count']}",
+                    f"Requests: {stats['request_count']}/{stats['rotate_interval']}",
+                    f"Auto-rotate: {'Enabled' if stats['auto_rotate'] else 'Disabled'}"
+                ]
+                for info in flareprox_info:
+                    self.console.print(f"  • {info}")
         else:
             print("\n🌐 API Endpoints:")
             for name, url in endpoints:
                 print(f"  {name}: {url}")
             print(f"\n✅ Server running at: {base_url}")
+            
+            # Show FlareProx status if enabled
+            flareprox = get_flareprox_manager()
+            stats = flareprox.get_stats()
+            if stats["enabled"] and stats["initialized"]:
+                print(f"\n🔥 FlareProx Status:")
+                print(f"  • Status: Active")
+                print(f"  • Proxies: {stats['proxy_count']}")
+                print(f"  • Auto-rotate: {'Enabled' if stats['auto_rotate'] else 'Disabled'}")
     
     def print_provider_status(self, provider_data: List[Dict[str, Any]]):
         """Display provider status table"""
@@ -264,6 +288,9 @@ async def run_startup_diagnostics(display: CLIDisplay, verbose: bool = True):
         display.print_banner()
         display.print_config_summary()
     
+    # Initialize FlareProx if enabled
+    await initialize_flareprox()
+    
     # Check provider status
     if display.use_rich and verbose:
         with Progress(
@@ -402,4 +429,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-

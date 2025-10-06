@@ -16,6 +16,7 @@ from app.core import image_endpoints
 from app.utils.reload_config import RELOAD_CONFIG
 from app.utils.logger import setup_logger
 from app.utils.token_pool import initialize_token_pool
+from app.utils.flareprox_manager import initialize_flareprox, get_flareprox_manager
 from app.providers import initialize_providers
 
 from granian import Granian
@@ -29,6 +30,9 @@ logger = setup_logger(log_dir="logs", debug_mode=settings.DEBUG_LOGGING)
 async def lifespan(app: FastAPI):
     # 初始化提供商系统
     initialize_providers()
+
+    # 初始化 FlareProx (如果启用)
+    await initialize_flareprox()
 
     # 初始化 token 池
     token_list = settings.auth_token_list
