@@ -36,12 +36,12 @@ class QwenUploader:
     MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
     RETRY_DELAY = 1.0  # seconds
     
-    # Supported file types
+    # Supported file types (using main types for detection)
     SUPPORTED_TYPES = {
-        'image': ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'],
-        'video': ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv'],
-        'audio': ['audio/mp3', 'audio/wav', 'audio/aac', 'audio/ogg'],
-        'document': ['application/pdf', 'text/plain', 'application/msword']
+        'image': ['image'],
+        'video': ['video'],
+        'audio': ['audio'],
+        'document': ['application', 'text']
     }
     
     def __init__(self, auth_token: str):
@@ -83,9 +83,10 @@ class QwenUploader:
         
         main_type = mime_type.split('/')[0].lower()
         
-        # Check if it's a supported main type
-        if main_type in QwenUploader.SUPPORTED_TYPES:
-            return main_type
+        # Check each category
+        for category, types in QwenUploader.SUPPORTED_TYPES.items():
+            if main_type in types:
+                return category
         
         return 'file'
     
@@ -378,4 +379,3 @@ async def upload_file_to_qwen_oss(
     """
     uploader = QwenUploader(auth_token)
     return await uploader.upload_file(file_buffer, filename)
-
