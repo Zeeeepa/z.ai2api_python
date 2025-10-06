@@ -13,7 +13,6 @@ from pathlib import Path
 from app.providers.base import BaseProvider, provider_registry
 from app.providers.zai_provider import ZAIProvider
 from app.providers.k2think_provider import K2ThinkProvider
-from app.providers.longcat_provider import LongCatProvider
 from app.providers.qwen_provider import QwenProvider
 from app.models.schemas import OpenAIRequest
 from app.core.config import settings
@@ -66,13 +65,6 @@ class ProviderFactory:
             provider_registry.register(
                 k2think_provider,
                 k2think_provider.get_supported_models()
-            )
-            
-            # 注册 LongCat 提供商
-            longcat_provider = LongCatProvider()
-            provider_registry.register(
-                longcat_provider,
-                longcat_provider.get_supported_models()
             )
             
             # 注册 Qwen 提供商（如果配置存在）
