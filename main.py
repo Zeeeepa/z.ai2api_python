@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core import openai
+from app.core import image_endpoints
 from app.utils.reload_config import RELOAD_CONFIG
 from app.utils.logger import setup_logger
 from app.utils.token_pool import initialize_token_pool
@@ -55,6 +56,7 @@ app.add_middleware(
 
 # Include API routers
 app.include_router(openai.router)
+app.include_router(image_endpoints.router)
 
 
 @app.options("/")

@@ -733,3 +733,344 @@ class QwenProvider(BaseProvider):
         except Exception as e:
             logger.error(f"Image generation failed: {e}", exc_info=True)
             raise
+    
+    async def edit_image(
+        self,
+        image: str,
+        prompt: str,
+        mask: Optional[str] = None,
+        model: str = "qwen-max",
+        size: str = "1024x1024",
+        n: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Edit image based on text instructions
+        
+        Args:
+            image: Base64 encoded image or URL
+            prompt: Edit instructions
+            mask: Optional base64 encoded mask
+            model: Model name
+            size: Image size
+            n: Number of images
+            
+        Returns:
+            OpenAI-compatible response with edited image URL
+        """
+        import uuid
+        import base64
+        import re
+        
+        try:
+            # Clean model name
+            base_model = model.replace('-image_edit', '').replace('-image', '')
+            
+            # Create chat session for image editing
+            chat_id = await self.create_chat_session(base_model, chat_type="image_edit")
+            if not chat_id:
+                raise Exception("Failed to create chat session for image editing")
+            
+            # Process image input
+            image_url = None
+            if image.startswith('http://') or image.startswith('https://'):
+                # Direct URL
+                image_url = image
+            elif image.startswith('data:image'):
+                # Data URL - extract base64
+                match = re.search(r'data:image/[^;]+;base64,(.+)', image)
+                if match:
+                    image_data = base64.b64decode(match.group(1))
+                    # Upload to OSS
+                    from app.providers.qwen_upload import upload_file_to_qwen_oss
+                    headers = await self.get_auth_headers()
+                    token = headers.get('Authorization', '').replace('Bearer ', '')
+                    upload_result = await upload_file_to_qwen_oss(image_data, 'edit_image.png', token)
+                    image_url = upload_result['file_url']
+                else:
+                    raise ValueError("Invalid data URL format")
+            else:
+                # Assume base64 encoded
+                try:
+                    image_data = base64.b64decode(image)
+                    # Upload to OSS
+                    from app.providers.qwen_upload import upload_file_to_qwen_oss
+                    headers = await self.get_auth_headers()
+                    token = headers.get('Authorization', '').replace('Bearer ', '')
+                    upload_result = await upload_file_to_qwen_oss(image_data, 'edit_image.png', token)
+                    image_url = upload_result['file_url']
+                except Exception as e:
+                    raise ValueError(f"Invalid base64 image: {e}")
+            
+            # Calculate aspect ratio
+            aspect_ratio = self.calculate_aspect_ratio(size)
+            
+            # Build request with image context
+            messages = [
+                {
+                    "role": "user",
+                    "content": f"![image]({image_url})\n\n{prompt}",
+                    "chat_type": "image_edit",
+                    "extra": {},
+                    "feature_config": {
+                        "output_schema": "phase",
+                        "thinking_enabled": False
+                    }
+                }
+            ]
+            
+            request_body = {
+                "model": base_model,
+                "messages": messages,
+                "stream": True,
+                "incremental_output": True,
+                "chat_type": "image_edit",
+                "session_id": str(uuid.uuid4()),
+                "chat_id": chat_id,
+                "parent_id": None,
+                "chat_mode": "normal",
+                "timestamp": int(time.time() * 1000),
+                "feature_config": {
+                    "output_schema": "phase",
+                    "thinking_enabled": False
+                },
+                "image_gen_config": {
+                    "aspect_ratio": aspect_ratio,
+                    "size": size
+                }
+            }
+            
+            # Get headers
+            headers = await self.get_auth_headers()
+            
+            logger.info(f"Editing image: prompt='{prompt[:50]}...', size={size}")
+            
+            # Make request
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    f"{self.CHAT_COMPLETIONS_URL}?chat_id={chat_id}",
+                    json=request_body,
+                    headers=headers
+                )
+                
+                if response.status_code != 200:
+                    raise Exception(f"Image editing failed: {response.status_code} - {response.text}")
+                
+                # Parse streaming response
+                image_urls = []
+                sent_urls = set()
+                
+                buffer = ""
+                async for chunk in response.aiter_text():
+                    buffer += chunk
+                    
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        
+                        if not line or not line.startswith("data:"):
+                            continue
+                        
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        
+                        try:
+                            data = json.loads(data_str)
+                            
+                            # Extract image URL
+                            if data.get("type") == "image_gen" or "image_gen" in str(data):
+                                url = None
+                                
+                                if "data" in data:
+                                    url = data["data"].get("url") or data["data"].get("content")
+                                
+                                # Check markdown format
+                                content = data.get("data", {}).get("content", "")
+                                if "![" in content and "](" in content:
+                                    matches = re.findall(r'!\[.*?\]\((.*?)\)', content)
+                                    if matches:
+                                        url = matches[0]
+                                
+                                if url and url not in sent_urls:
+                                    image_urls.append(url)
+                                    sent_urls.add(url)
+                                    logger.info(f"✅ Found edited image URL: {url}")
+                                    
+                        except json.JSONDecodeError:
+                            continue
+                        except Exception as e:
+                            logger.debug(f"Error parsing chunk: {e}")
+                            continue
+                
+                if not image_urls:
+                    raise Exception("No image URLs found in response")
+                
+                # Return OpenAI-compatible response
+                return {
+                    "created": int(time.time()),
+                    "data": [
+                        {
+                            "url": url,
+                            "revised_prompt": prompt
+                        }
+                        for url in image_urls[:n]
+                    ]
+                }
+                
+        except Exception as e:
+            logger.error(f"Image editing failed: {e}", exc_info=True)
+            raise
+    
+    async def generate_video(
+        self,
+        prompt: str,
+        model: str = "qwen-max",
+        duration: int = 5,
+        size: str = "1920x1080"
+    ) -> Dict[str, Any]:
+        """
+        Generate video from text prompt (text-to-video)
+        
+        Args:
+            prompt: Text description of desired video
+            model: Model name
+            duration: Video duration in seconds
+            size: Video resolution
+            
+        Returns:
+            Response with video URL
+        """
+        import uuid
+        
+        try:
+            # Clean model name
+            base_model = model.replace('-video', '')
+            
+            # Create chat session for video generation
+            chat_id = await self.create_chat_session(base_model, chat_type="t2v")
+            if not chat_id:
+                raise Exception("Failed to create chat session for video generation")
+            
+            # Calculate aspect ratio
+            aspect_ratio = self.calculate_aspect_ratio(size)
+            
+            # Build request
+            request_body = {
+                "model": base_model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt,
+                        "chat_type": "t2v",
+                        "extra": {},
+                        "feature_config": {
+                            "output_schema": "phase",
+                            "thinking_enabled": False
+                        }
+                    }
+                ],
+                "stream": True,
+                "incremental_output": True,
+                "chat_type": "t2v",
+                "session_id": str(uuid.uuid4()),
+                "chat_id": chat_id,
+                "parent_id": None,
+                "chat_mode": "normal",
+                "timestamp": int(time.time() * 1000),
+                "feature_config": {
+                    "output_schema": "phase",
+                    "thinking_enabled": False
+                },
+                "video_gen_config": {
+                    "aspect_ratio": aspect_ratio,
+                    "size": size,
+                    "duration": duration
+                }
+            }
+            
+            # Get headers
+            headers = await self.get_auth_headers()
+            
+            logger.info(f"Generating video: prompt='{prompt[:50]}...', duration={duration}s, size={size}")
+            
+            # Make request with longer timeout for video
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                response = await client.post(
+                    f"{self.CHAT_COMPLETIONS_URL}?chat_id={chat_id}",
+                    json=request_body,
+                    headers=headers
+                )
+                
+                if response.status_code != 200:
+                    raise Exception(f"Video generation failed: {response.status_code} - {response.text}")
+                
+                # Parse streaming response
+                video_urls = []
+                sent_urls = set()
+                
+                buffer = ""
+                async for chunk in response.aiter_text():
+                    buffer += chunk
+                    
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        
+                        if not line or not line.startswith("data:"):
+                            continue
+                        
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        
+                        try:
+                            data = json.loads(data_str)
+                            
+                            # Extract video URL
+                            if data.get("type") == "video_gen" or "video_gen" in str(data):
+                                url = None
+                                
+                                if "data" in data:
+                                    url = data["data"].get("url") or data["data"].get("content")
+                                
+                                # Check markdown format
+                                content = data.get("data", {}).get("content", "")
+                                if "[video](" in content or "![" in content:
+                                    import re
+                                    matches = re.findall(r'!\[.*?\]\((.*?)\)|\[video\]\((.*?)\)', content)
+                                    for match in matches:
+                                        url = match[0] or match[1]
+                                        if url:
+                                            break
+                                
+                                if url and url not in sent_urls:
+                                    video_urls.append(url)
+                                    sent_urls.add(url)
+                                    logger.info(f"✅ Found video URL: {url}")
+                                    
+                        except json.JSONDecodeError:
+                            continue
+                        except Exception as e:
+                            logger.debug(f"Error parsing chunk: {e}")
+                            continue
+                
+                if not video_urls:
+                    raise Exception("No video URLs found in response")
+                
+                # Return response
+                return {
+                    "created": int(time.time()),
+                    "data": [
+                        {
+                            "url": url,
+                            "prompt": prompt,
+                            "duration": duration,
+                            "size": size
+                        }
+                        for url in video_urls
+                    ]
+                }
+                
+        except Exception as e:
+            logger.error(f"Video generation failed: {e}", exc_info=True)
+            raise
