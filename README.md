@@ -1,471 +1,372 @@
-# Z.AI2API Python - Multi-Provider OpenAI-Compatible API
+# Z.AI2API - OpenAI-Compatible Multi-Provider API Gateway
 
-OpenAI-compatible API proxy supporting multiple AI providers: Qwen, Z.AI, K2Think, and LongCat.
+<div align="center">
+
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
+
+**Unified OpenAI-compatible API gateway supporting multiple AI providers with unlimited scalability via FlareProx**
+
+[Features](#features) • [Quick Start](#quick-start) • [Docker Deploy](#docker-deployment) • [FlareProx](#flareprox-integration) • [API Docs](#api-documentation)
+
+</div>
+
+---
+
+## 🎯 Features
+
+- ✅ **OpenAI-Compatible API** - Drop-in replacement for OpenAI API
+- 🔄 **Multi-Provider Support** - Z.AI, K2Think, Qwen (45+ models total)
+- 🚀 **Unlimited Scalability** - FlareProx integration for IP rotation via Cloudflare Workers
+- 🐳 **Docker Ready** - One-command deployment with docker-compose
+- ⚡ **High Performance** - Async/await, streaming support
+- 🔐 **Secure** - Environment-based configuration
+- 📊 **Comprehensive** - Tool calling, thinking mode, search, multimodal
+
+---
+
+## 📦 Supported Providers & Models
+
+| Provider | Models | Features |
+|----------|--------|----------|
+| **Z.AI** | 7 | GLM-4.5, GLM-4.6 (standard, thinking, search, air) |
+| **K2Think** | 1 | MBZUAI-IFM/K2-Think (advanced reasoning) |
+| **Qwen** | 35+ | qwen-max/plus/turbo/long + variants (thinking, search, image, video, deep-research) |
+
+**Total**: 45+ models across 3 providers
+
+---
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+- Python 3.10+
+- Docker & Docker Compose (for container deployment)
+- Provider credentials (Z.AI, K2Think, Qwen)
+
+### Installation
+
 ```bash
+# Clone repository
+git clone https://github.com/Zeeeepa/z.ai2api_python.git
+cd z.ai2api_python
+
 # Install dependencies
-pip install -r requirements.txt
+pip install -e .
 
-# Configure authentication
+# Configure environment
 cp .env.example .env
-# Edit .env with your settings
+# Edit .env and add your credentials
 
-# Run server
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
+# Start server
+python main.py
 ```
 
-## 📋 Table of Contents
+Server starts at `http://localhost:8080`
 
-- [Qwen Provider](#qwen-provider)
-- [Z.AI Provider](#zai-provider)
-- [K2Think Provider](#k2think-provider)
-- [LongCat Provider](#longcat-provider)
-- [Testing](#testing)
+### Configuration
 
----
+Edit `.env` file with your credentials:
 
-# Qwen Provider
+```env
+# Provider Credentials
+ZAI_EMAIL=your_email@example.com
+ZAI_PASSWORD=your_password
 
-## 🔑 Authentication
+K2THINK_EMAIL=your_email@example.com
+K2THINK_PASSWORD=your_password
 
-### Get Your Token (JavaScript Snippet)
+QWEN_EMAIL=your_email@example.com
+QWEN_PASSWORD=your_password
 
-Visit [chat.qwen.ai](https://chat.qwen.ai), log in, and run this in the browser console (F12):
-
-```javascript
-const _0x4015=['WRPXWRnYW5G','rmoucJBdGW','ymkojmokoG','b8oDAtWA']; // [truncated for README]
-// Full script available in docs/qwen_token_extractor.js
-```
-
-The script will:
-1. Extract localStorage token
-2. Extract session cookie
-3. Compress the credentials
-4. Copy to clipboard
-
-### Temporary Free Token
-
-For quick testing (expires 2025-10-08):
-```
-H4sIAAAAAAAAAxXIzXaiMBgA0AfitEV+Ki66AD6IEQWhMCnuJAQJEEQKEjnz8HPmLi97HeoCUR7xA85WvAk5/sV9YlIXf+J2+PnjHnbv7HUYLv9DeGou/CZMb8YxjdUozaYQ6Bq+NjzXPPOYxlooDnUuTvLUYCP6xr9YyJrqSUWRv1K9fFKRVLlW14UoO9zcZbhmWggnPVy95egeOra3edR4epi2RgTZGjaX3Xuwjul3uV2wHr35+8a0KnqVE3+11CGR/6sNNC3f0hhnT/yXzXx6qB60qIUt9GDMCBQZHwdJxdOHznAmlGSAHyhGFCzJA9gDjtZ8vbq2d5SjMuVKV2I7WAJAP3LDIgO1P0DOyGOXyv80O7ezlxTfLBftnW1ZovyC8my/s4PZyv1dNM7qSObs1n5we1mqkYFlGRA8kFAM+I4l7JiUI+Q5uAZaAN1BN4ADnEsJWbH0DLayj08xeXxp2l1hBERRXWMJN+cMG+vSE0lVaztUduGRtGCoT+wo9SWBRnkRK0AvxUDEL+ZmDtAcZBp7RiQdKcvO9XFwCpEpXjJZ1nRWnNryc2NU7rK9ydKG0C7u2hd3wIyg42vIgNdidMXS4REy7ZrZ7qRrS9AIkyXjbrB6tG1AbYCRYCUo/FgQApNwNVcmAgGr08k2g8XI4R9DCxV3aQIAAA==
-```
-
-## 📊 Available Models
-
-### Chat Models
-- `qwen-max` / `qwen-max-latest` - Most capable model
-- `qwen-plus` / `qwen-plus-latest` - Balanced performance
-- `qwen-turbo` / `qwen-turbo-latest` - Fast responses
-- `qwen-long` - Long context support
-- `qwen-max-0428` - Dated version
-
-### Specialized Models
-- `qwen-max-thinking` - Chain-of-thought reasoning
-- `qwen-max-search` - Web search enabled
-- `qwen-max-image` - Image generation
-- `qwen-max-image_edit` - Image editing
-- `qwen-max-video` - Video generation
-- `qwen-max-deep-research` / `qwen-deep-research` - Deep research mode
-
-### Code Models
-- `qwen3-coder-plus` - Advanced code generation with tool calls
-
-**Total: 32 model variants** (4 base × 8 capabilities)
-
-## 🌐 Endpoints
-
-| Endpoint                 | Method   | Description           |
-|--------------------------|----------|-----------------------|
-| `/v1/validate`           | GET/POST | Validate token        |
-| `/v1/refresh`            | GET/POST | Refresh token         |
-| `/v1/models`             | GET      | List available models |
-| `/v1/chat/completions`   | POST     | Chat completions      |
-| `/v1/images/generations` | POST     | Generate images       |
-| `/v1/images/edits`       | POST     | Edit existing images  |
-| `/v1/videos/generations` | POST     | Generate videos       |
-
-## 💬 Usage Examples
-
-### Basic Chat
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_COMPRESSED_QWEN_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "qwen-max-latest",
-    messages: [{ role: "user", content: "Hello, how are you?" }],
-    stream: false
-  })
-});
-```
-
-### 🌐 Web Search Mode
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "qwen-max-latest",
-    tools: [{ type: "web_search" }],
-    messages: [{ 
-      role: "user", 
-      content: "What are the latest AI developments?" 
-    }]
-  })
-});
-```
-
-### 🧠 Thinking Mode (Chain-of-Thought)
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "qwen-max-latest",
-    enable_thinking: true,
-    thinking_budget: 30000,  // milliseconds
-    messages: [{ 
-      role: "user", 
-      content: "Solve: If x + 5 = 12, what is x?" 
-    }]
-  })
-});
-```
-
-### 💻 Code Generation (qwen3-coder-plus)
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "qwen3-coder-plus",
-    tools: [{ type: "code" }],
-    messages: [{ 
-      role: "user", 
-      content: "Write a Python function to calculate factorial" 
-    }],
-    stream: true
-  })
-});
-```
-
-### 🖼️ Vision (Multimodal)
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "qwen-max-latest",
-    messages: [{
-      role: "user",
-      content: [
-        { type: "text", text: "What do you see in this image?" },
-        { 
-          type: "image_url", 
-          image_url: { 
-            url: "https://example.com/image.jpg"
-            // or: "data:image/jpeg;base64,..."
-          }
-        }
-      ]
-    }]
-  })
-});
-```
-
-### ✅ Valid Multimodal Combinations
-
-```javascript
-// ✅ Image + PDF (different categories)
-{
-  content: [
-    { type: "text", text: "Analyze this image and document" },
-    { type: "image_url", image_url: { url: "image.jpg" } },
-    { type: "file_url", file_url: { url: "document.pdf" } }
-  ]
-}
-```
-
-### ❌ Invalid Combinations
-
-```javascript
-// ❌ Image + Video (same media category)
-{
-  content: [
-    { type: "image_url", image_url: { url: "image.jpg" } },
-    { type: "video_url", video_url: { url: "video.mp4" } }
-    // Cannot mix media files
-  ]
-}
-```
-
-### 🔬 Deep Research
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "qwen-deep-research",
-    messages: [{ 
-      role: "user", 
-      content: "Research quantum computing developments" 
-    }]
-  })
-});
-```
-
-### 🎨 Image Generation
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/images/generations", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    prompt: "A beautiful sunset over mountains",
-    size: "1024x1024"
-  })
-});
-```
-
-### ✏️ Image Editing
-
-```javascript
-// Option 1: FormData with file upload
-const formData = new FormData();
-formData.append("image", imageFile);
-formData.append("prompt", "Add a rainbow in the sky");
-
-const response = await fetch("http://localhost:8000/v1/images/edits", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN"
-  },
-  body: formData
-});
-
-// Option 2: JSON with URL
-const response = await fetch("http://localhost:8000/v1/images/edits", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    image: "https://example.com/image.jpg",
-    prompt: "Change the sky to sunset"
-  })
-});
-```
-
-### 🎬 Video Generation
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/videos/generations", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    prompt: "A cat playing with yarn in slow motion",
-    size: "1280x720"
-  })
-});
+# Optional: FlareProx for unlimited scalability
+FLAREPROX_ENABLED=true
+CLOUDFLARE_API_TOKEN=your_token
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+FLAREPROX_PROXY_COUNT=3
 ```
 
 ---
 
-# Z.AI Provider
+## 🐳 Docker Deployment
 
-## 🔑 Authentication
-
-Visit [chat.z.ai](https://chat.z.ai), log in, and extract token using browser console.
-
-## 📊 Available Models
-
-- `GLM-4.5` - Latest GLM model
-- `GLM-4.5-Thinking` - Reasoning mode
-- `GLM-4.5-Search` - Web search
-- `GLM-4.5-Air` - Lightweight version
-- `GLM-4.6` - Newer version
-- `GLM-4.6-Thinking` - GLM-4.6 with reasoning
-- `GLM-4.6-Search` - GLM-4.6 with search
-
-## 💬 Usage Examples
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_ZAI_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "GLM-4.5",
-    messages: [{ role: "user", content: "Hello!" }]
-  })
-});
-```
-
----
-
-# K2Think Provider
-
-## 🔑 Authentication
-
-Visit [www.k2think.ai](https://www.k2think.ai), log in, and extract token.
-
-## 📊 Available Models
-
-- `MBZUAI-IFM/K2-Think` - Advanced reasoning model
-
-## 💬 Usage Example
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_K2THINK_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "MBZUAI-IFM/K2-Think",
-    messages: [{ role: "user", content: "Explain quantum computing" }]
-  })
-});
-```
-
----
-
-# LongCat Provider
-
-## 🔑 Authentication
-
-Requires `LONGCAT_PASSPORT_TOKEN` in environment variables.
-
-## 📊 Available Models
-
-- `LongCat-Flash` - Fast responses
-- `LongCat` - Standard model
-- `LongCat-Search` - Web search enabled
-
-## 💬 Usage Example
-
-```javascript
-const response = await fetch("http://localhost:8000/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    model: "LongCat",
-    messages: [{ role: "user", content: "Hello!" }]
-  })
-});
-```
-
----
-
-# Testing
-
-## Run Comprehensive Tests
+### Quick Deploy
 
 ```bash
-# Test all providers with browser authentication
-python tests/test_browser_auth.py --headless
+# Copy and configure environment
+cp .env.example .env
+# Edit .env with your credentials
 
-# Test specific provider
-python tests/test_browser_auth.py --test-qwen --headless
-
-# Test OpenAPI endpoints
-python tests/test_openapi_validation.py
+# Deploy with Docker
+cd docker
+./deploy.sh
 ```
 
-## Test Results
-
-✅ **Authentication**: Working with browser automation  
-✅ **Z.AI**: 10 models, 6/6 tests passed  
-✅ **K2Think**: 1 model, 2/2 tests passed  
-✅ **Qwen**: 19 models detected, auth working  
-
----
-
-# Configuration
-
-## Environment Variables
+### Manual Docker Commands
 
 ```bash
-# Required
-AUTH_TOKEN=your-api-key
+# Build and start
+docker-compose -f docker/docker-compose.yml up -d
 
-# Optional
-SKIP_AUTH_TOKEN=false          # Skip authentication (testing only)
-AUTH_TOKENS_FILE=tokens.txt    # Multiple API keys
-LONGCAT_PASSPORT_TOKEN=token   # LongCat auth
-HOST=0.0.0.0
-PORT=8080
-LOG_LEVEL=INFO
+# View logs
+docker-compose -f docker/docker-compose.yml logs -f
+
+# Stop
+docker-compose -f docker/docker-compose.yml down
 ```
 
-## Docker Deployment
+---
+
+## 🔥 FlareProx Integration
+
+FlareProx enables **unlimited scalability** by routing requests through Cloudflare Workers, providing:
+
+- ✅ **IP Rotation** - Automatic IP address rotation
+- ✅ **Rate Limit Bypass** - Distribute requests across multiple endpoints
+- ✅ **Free Tier** - 100,000 requests/day per worker
+- ✅ **Global CDN** - Cloudflare's edge network
+
+### Setup FlareProx
+
+1. **Get Cloudflare Credentials**:
+   - Sign up at [cloudflare.com](https://cloudflare.com)
+   - Create API token: [https://dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
+   - Use "Edit Cloudflare Workers" template
+   - Copy token and Account ID
+
+2. **Configure Environment**:
+```env
+FLAREPROX_ENABLED=true
+CLOUDFLARE_API_TOKEN=your_token_here
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+FLAREPROX_PROXY_COUNT=3  # Number of proxy endpoints
+FLAREPROX_AUTO_ROTATE=true
+```
+
+3. **Create Proxies**:
+```bash
+# Create 3 proxy endpoints
+python flareprox.py create --count 3
+
+# List active proxies
+python flareprox.py list
+
+# Cleanup all proxies
+python flareprox.py cleanup
+```
+
+### How FlareProx Works
+
+```
+Client Request → Z.AI2API Router → FlareProx Pool (3+ endpoints)
+                                    ↓ (auto-rotate)
+                                 Cloudflare Worker #1 → Provider API
+                                 Cloudflare Worker #2 → Provider API  
+                                 Cloudflare Worker #3 → Provider API
+```
+
+Each worker gets **100,000 requests/day**, so 3 workers = **300,000 requests/day** for free!
+
+---
+
+## 📖 API Documentation
+
+### Base URL
+```
+http://localhost:8080
+```
+
+### Endpoints
+
+#### Chat Completions
+```bash
+POST /v1/chat/completions
+
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "GLM-4.5",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": false
+  }'
+```
+
+#### List Models
+```bash
+GET /v1/models
+
+curl http://localhost:8080/v1/models
+```
+
+#### Health Check
+```bash
+GET /health
+
+curl http://localhost:8080/health
+```
+
+### Supported Features
+
+- ✅ **Streaming** - `"stream": true`
+- ✅ **Thinking Mode** - Use models with `-thinking` suffix
+- ✅ **Search** - Use models with `-search` suffix
+- ✅ **Tool Calling** - `"tools": [...]`
+- ✅ **Multimodal** - Images, video (model-dependent)
+- ✅ **Temperature & Parameters** - `temperature`, `max_tokens`, `top_p`
+
+### Example: Using Thinking Mode
 
 ```bash
-docker build -t z-ai2api .
-docker run -p 8080:8080 --env-file .env z-ai2api
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "GLM-4.5-Thinking",
+    "messages": [
+      {"role": "user", "content": "Explain quantum computing"}
+    ],
+    "stream": false
+  }'
 ```
 
 ---
 
-# Features
+## 🧪 Testing
 
-✅ **Multi-Provider Support**: Qwen, Z.AI, K2Think, LongCat  
-✅ **OpenAI-Compatible API**: Drop-in replacement  
-✅ **Advanced Features**: Thinking mode, web search, code generation  
-✅ **Multimodal**: Images, videos, audio, documents  
-✅ **Streaming**: Real-time response streaming  
-✅ **Token Management**: Automatic token rotation  
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific provider tests
+pytest tests/test_zai.py -v -s
+pytest tests/test_k2.py -v -s
+pytest tests/test_qwen.py -v -s
+
+# Test with actual API calls
+pytest tests/test_zai.py::TestZAIAuthentication::test_token_retrieval -v -s
+```
 
 ---
 
-# License
+## 📁 Project Structure
 
-MIT License - See [LICENSE](LICENSE) for details
+```
+z.ai2api_python/
+├── app/                    # Application code
+│   ├── api/               # API endpoints
+│   ├── providers/         # Provider implementations
+│   ├── models/            # Data models
+│   ├── core/              # Core configuration
+│   └── utils/             # Utilities
+├── docker/                # Docker deployment
+│   ├── Dockerfile         # Container image
+│   ├── docker-compose.yml # Service orchestration
+│   └── deploy.sh          # Deployment script
+├── tests/                 # Test suite
+│   ├── test_zai.py       # Z.AI tests
+│   ├── test_k2.py        # K2Think tests
+│   └── test_qwen.py      # Qwen tests
+├── .env.example          # Environment template
+├── flareprox.py          # FlareProx manager
+├── main.py               # Entry point
+└── README.md             # This file
+```
 
 ---
 
-# Documentation
+## 🛠️ Development
 
-- [Qwen Consolidation](QWEN_CONSOLIDATION.md) - Technical details on Qwen provider
-- [OpenAPI Spec](docs/openapi.json) - Complete API specification
-- [Examples](examples/) - Code examples
+### Local Development
+
+```bash
+# Install in development mode
+pip install -e .
+
+# Run with auto-reload
+python main.py --reload
+
+# Run with debug logging
+python main.py --debug
+```
+
+### CLI Commands
+
+```bash
+# List available models
+python main.py --list-models
+
+# Health check
+python main.py --check
+
+# Version info
+python main.py --version
+```
+
+---
+
+## 📊 Performance & Scalability
+
+### Without FlareProx
+- Single IP address
+- Provider rate limits apply
+- ~100-1000 requests/hour (provider dependent)
+
+### With FlareProx (3 workers)
+- 3 rotating IP addresses
+- 300,000 requests/day total
+- ~12,500 requests/hour sustained
+- Automatic failover
+
+### Scaling to 100M+ Requests/Month
+
+```bash
+# Create 10 FlareProx endpoints
+python flareprox.py create --count 10
+
+# Result: 10 workers × 100K/day = 1M requests/day = 30M/month
+```
+
+**Cost**: $0 (Cloudflare Workers free tier)
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new features
+4. Submit a pull request
+
+---
+
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE) file for details
+
+---
+
+## 🔗 Links
+
+- **GitHub**: [Zeeeepa/z.ai2api_python](https://github.com/Zeeeepa/z.ai2api_python)
+- **Issues**: [Report a bug](https://github.com/Zeeeepa/z.ai2api_python/issues)
+- **Cloudflare Workers**: [Get Started](https://workers.cloudflare.com/)
+
+---
+
+## ⚠️ Disclaimer
+
+This project is for educational and research purposes. Ensure you comply with provider terms of service and API usage policies.
+
+---
+
+<div align="center">
+
+**Made with ❤️ by the Z.AI2API Team**
+
+⭐ Star this repo if you find it useful!
+
+</div>
 

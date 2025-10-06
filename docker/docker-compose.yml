@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # Main API Router Service
+  z-ai2api-router:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: z-ai2api-router
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - DEBUG=${DEBUG:-false}
+      - ANONYMOUS_MODE=${ANONYMOUS_MODE:-true}
+      
+      # Provider Credentials
+      - ZAI_EMAIL=${ZAI_EMAIL}
+      - ZAI_PASSWORD=${ZAI_PASSWORD}
+      - K2THINK_EMAIL=${K2THINK_EMAIL}
+      - K2THINK_PASSWORD=${K2THINK_PASSWORD}
+      - QWEN_EMAIL=${QWEN_EMAIL}
+      - QWEN_PASSWORD=${QWEN_PASSWORD}
+      
+      # FlareProx Configuration
+      - FLAREPROX_ENABLED=${FLAREPROX_ENABLED:-false}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}
+      - FLAREPROX_PROXY_COUNT=${FLAREPROX_PROXY_COUNT:-3}
+      - FLAREPROX_AUTO_ROTATE=${FLAREPROX_AUTO_ROTATE:-true}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      
+    volumes:
+      - ../logs:/app/logs
+      - flareprox-cache:/app/.flareprox
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - z-ai2api-network
+
+volumes:
+  flareprox-cache:
+    driver: local
+
+networks:
+  z-ai2api-network:
+    driver: bridge
+
