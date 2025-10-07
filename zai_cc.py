@@ -1,22 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Z.AI Claude Code Integration
-============================
+Z.AI Claude Code Integration - WORKING VERSION
+==============================================
 
-This module provides Claude Code integration for the Z.AI API service.
-It acts as a bridge between Claude Code Router and the Z.AI backend,
-handling authentication, request transformation, and response streaming.
-
-Usage:
-    python zai_cc.py --port 3456 --host 127.0.0.1
-
-Environment Variables:
-    ZAIMCP_TOKEN: Z.AI authentication token (optional, uses anonymous if not set)
-    ZAIMCP_PORT: Server port (default: 3456)
-    ZAIMCP_HOST: Server host (default: 127.0.0.1)
-    
-Compatible with Claude Code Router plugin system.
+Two-step chat creation flow implemented correctly.
 """
 
 import asyncio
@@ -28,294 +16,207 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, AsyncGenerator
 import argparse
+import time
 
 import httpx
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse
 import uvicorn
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s',
+    format='%(asctime)s | %(levelname)-8s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
 
-# Configuration
 BASE_URL = "https://chat.z.ai"
-X_FE_VERSION = "prod-fe-1.0.76"  # Verified working version from Z.ai2api
+X_FE_VERSION = "prod-fe-1.0.76"
 
 class ZAIClaudeCodeBridge:
-    """
-    Bridge between Claude Code Router and Z.AI API.
-    
-    Handles:
-    - Anonymous/authenticated token management
-    - Request transformation (OpenAI → Z.AI format)
-    - Response transformation (Z.AI → OpenAI format)
-    - Streaming support
-    """
+    """Bridge with TWO-STEP chat creation flow."""
     
     def __init__(self, token: Optional[str] = None):
-        """
-        Initialize the bridge.
-        
-        Args:
-            token: Z.AI authentication token. If None, uses anonymous mode.
-        """
         self.token = token
         self.client = httpx.AsyncClient(timeout=120.0)
-        logger.info(f"🔧 Initialized Z.AI bridge (anonymous={not token})")
+        logger.info(f"🔧 Initialized (anonymous={not token})")
     
     async def get_token(self) -> str:
-        """
-        Get authentication token (anonymous or provided).
-        
-        Returns:
-            str: Authentication token for Z.AI API
-        """
+        """Get authentication token."""
         if self.token:
             return self.token
         
         try:
             response = await self.client.get(f"{BASE_URL}/api/v1/auths/")
-            data = response.json()
-            token = data.get("token")
-            logger.debug(f"✅ Got anonymous token: {token[:20]}...")
+            token = response.json().get("token")
+            logger.debug(f"✅ Got token: {token[:20]}...")
             return token
         except Exception as e:
-            logger.error(f"❌ Failed to get anonymous token: {e}")
-            raise HTTPException(status_code=500, detail="Failed to authenticate with Z.AI")
+            logger.error(f"❌ Token error: {e}")
+            raise HTTPException(status_code=500, detail=f"Auth failed: {e}")
     
     def generate_uuid(self) -> str:
-        """Generate a UUID for chat/message IDs."""
         return str(uuid.uuid4())
     
     def get_headers(self, token: str, chat_id: Optional[str] = None) -> Dict[str, str]:
-        """
-        Generate request headers for Z.AI API.
-        
-        Args:
-            token: Authentication token
-            chat_id: Optional chat ID for Referer header
-            
-        Returns:
-            Dict of HTTP headers
-        """
+        """Generate request headers."""
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
             "X-FE-Version": X_FE_VERSION,
             "Authorization": f"Bearer {token}",
             "Origin": BASE_URL,
+            "Referer": f"{BASE_URL}/c/{chat_id}" if chat_id else BASE_URL,
         }
-        
-        if chat_id:
-            headers["Referer"] = f"{BASE_URL}/c/{chat_id}"
-        else:
-            headers["Referer"] = BASE_URL
-        
         return headers
     
-    async def transform_request(self, openai_request: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Transform OpenAI-format request to Z.AI format.
-        
-        Args:
-            openai_request: Request in OpenAI API format
-            
-        Returns:
-            Dict containing:
-                - body: Z.AI request body
-                - token: Authentication token
-                - chat_id: Generated chat ID
-        """
-        # Extract OpenAI parameters
-        model = openai_request.get("model", "glm-4.5v")
-        messages = openai_request.get("messages", [])
-        stream = openai_request.get("stream", True)
-        temperature = openai_request.get("temperature")
-        max_tokens = openai_request.get("max_tokens")
-        
-        # Detect model capabilities
-        model_lower = model.lower()
-        is_thinking = "thinking" in model_lower
-        is_search = "search" in model_lower
-        
-        # Get authentication token
-        token = await self.get_token()
-        
-        # Generate IDs
-        chat_id = self.generate_uuid()
-        message_id = self.generate_uuid()
-        
-        # Build Z.AI request body
-        body = {
-            "stream": stream,
-            "model": model,
-            "messages": messages,
-            "params": {},
-            "features": {
-                "image_generation": False,
-                "web_search": is_search,
-                "auto_web_search": is_search,
-                "preview_mode": False,
-                "flags": [],
-                "features": [],
-                "enable_thinking": is_thinking,
-            },
-            "variables": {
-                "{{USER_NAME}}": "Guest",
-                "{{USER_LOCATION}}": "Unknown",
-                "{{CURRENT_DATETIME}}": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "{{CURRENT_DATE}}": datetime.now().strftime("%Y-%m-%d"),
-                "{{CURRENT_TIME}}": datetime.now().strftime("%H:%M:%S"),
-                "{{CURRENT_WEEKDAY}}": datetime.now().strftime("%A"),
-                "{{CURRENT_TIMEZONE}}": "UTC",
-                "{{USER_LANGUAGE}}": "en-US",
-            },
-            "model_item": {
-                "id": model,
-                "name": model,
-                "owned_by": "z.ai"
-            },
-            "chat_id": chat_id,
-            "id": message_id,
-        }
-        
-        # Add optional parameters
-        if temperature is not None:
-            body["params"]["temperature"] = temperature
-        if max_tokens is not None:
-            body["params"]["max_tokens"] = max_tokens
-        
-        logger.info(f"🔄 Transformed request: model={model}, stream={stream}, chat_id={chat_id}")
-        
-        return {
-            "body": body,
-            "token": token,
-            "chat_id": chat_id
-        }
-    
-    async def stream_response(
-        self,
-        response: httpx.Response,
+    async def create_chat_session(
+        self, 
+        token: str, 
+        chat_id: str,
+        message_id: str,
+        message: str,
         model: str
-    ) -> AsyncGenerator[str, None]:
+    ) -> str:
         """
-        Stream Z.AI response and transform to OpenAI format.
-        
-        Args:
-            response: httpx streaming response from Z.AI
-            model: Model name for response
-            
-        Yields:
-            str: SSE-formatted chunks in OpenAI format
+        STEP 1: Create chat session to get signature.
+        Returns the actual chat_id with embedded signature.
         """
-        try:
-            async for line in response.aiter_lines():
-                if not line or not line.startswith("data:"):
-                    continue
-                
-                chunk_str = line[5:].strip()
-                if not chunk_str or chunk_str == "[DONE]":
-                    yield "data: [DONE]\n\n"
-                    break
-                
-                try:
-                    chunk = json.loads(chunk_str)
-                    
-                    # Check if this is a Z.AI completion chunk
-                    if chunk.get("type") == "chat:completion":
-                        data = chunk.get("data", {})
-                        phase = data.get("phase", "other")
-                        delta_content = data.get("delta_content", "")
-                        
-                        if delta_content:
-                            # Transform to OpenAI format
-                            openai_chunk = {
-                                "id": f"chatcmpl-{self.generate_uuid()}",
-                                "object": "chat.completion.chunk",
-                                "created": int(datetime.now().timestamp()),
-                                "model": model,
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {
-                                        "role": "assistant",
-                                        "content": delta_content
-                                    },
-                                    "finish_reason": None
-                                }]
-                            }
-                            
-                            yield f"data: {json.dumps(openai_chunk)}\n\n"
-                        
-                        # Check for completion
-                        if data.get("done", False):
-                            finish_chunk = {
-                                "id": f"chatcmpl-{self.generate_uuid()}",
-                                "object": "chat.completion.chunk",
-                                "created": int(datetime.now().timestamp()),
-                                "model": model,
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {},
-                                    "finish_reason": "stop"
-                                }]
-                            }
-                            yield f"data: {json.dumps(finish_chunk)}\n\n"
-                            yield "data: [DONE]\n\n"
-                            break
-                
-                except json.JSONDecodeError:
-                    logger.warning(f"⚠️  Failed to parse chunk: {chunk_str[:100]}")
-                    continue
+        timestamp = int(time.time())
         
-        except Exception as e:
-            logger.error(f"❌ Stream error: {e}")
-            error_chunk = {
-                "id": f"chatcmpl-{self.generate_uuid()}",
-                "object": "chat.completion.chunk",
-                "created": int(datetime.now().timestamp()),
-                "model": model,
-                "choices": [{
-                    "index": 0,
-                    "delta": {
-                        "role": "assistant",
-                        "content": f"\n\n[Error: {str(e)}]"
+        payload = {
+            "chat": {
+                "id": "",
+                "title": "Claude Code Chat",
+                "models": [model],
+                "params": {},
+                "history": {
+                    "messages": {
+                        message_id: {
+                            "id": message_id,
+                            "parentId": None,
+                            "childrenIds": [],
+                            "role": "user",
+                            "content": message,
+                            "timestamp": timestamp,
+                            "models": [model]
+                        }
                     },
-                    "finish_reason": "stop"
-                }]
+                    "currentId": message_id
+                },
+                "createdAt": timestamp,
+                "updatedAt": timestamp
             }
-            yield f"data: {json.dumps(error_chunk)}\n\n"
-            yield "data: [DONE]\n\n"
+        }
+        
+        headers = self.get_headers(token, chat_id)
+        
+        logger.info(f"📝 Creating chat session with model: {model}")
+        
+        try:
+            response = await self.client.post(
+                f"{BASE_URL}/api/v1/chats/new",
+                json=payload,
+                headers=headers,
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                error_text = response.text
+                logger.error(f"❌ Chat creation failed ({response.status_code}): {error_text[:200]}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Chat creation failed: {error_text}"
+                )
+            
+            data = response.json()
+            actual_chat_id = data.get("id")
+            
+            if not actual_chat_id:
+                raise HTTPException(
+                    status_code=500,
+                    detail="No chat ID returned from session creation"
+                )
+            
+            logger.info(f"✅ Chat session created: {actual_chat_id}")
+            return actual_chat_id
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Chat creation error: {e}")
+            raise HTTPException(status_code=500, detail=f"Chat creation failed: {e}")
     
     async def chat_completion(self, request: Dict[str, Any]) -> Response:
         """
-        Handle chat completion request.
-        
-        Args:
-            request: OpenAI-format request
-            
-        Returns:
-            FastAPI Response (streaming or non-streaming)
+        Handle chat completion with TWO-STEP flow:
+        1. Create chat session
+        2. Send completion request
         """
         try:
-            # Transform request
-            transformed = await self.transform_request(request)
-            body = transformed["body"]
-            token = transformed["token"]
-            chat_id = transformed["chat_id"]
+            # Extract parameters
             model = request.get("model", "glm-4.5v")
+            messages = request.get("messages", [])
+            stream = request.get("stream", True)
             
-            # Build headers
-            headers = self.get_headers(token, chat_id)
+            # Get token
+            token = await self.get_token()
             
-            # Make request to Z.AI
-            logger.info(f"📡 Sending request to Z.AI: {BASE_URL}/api/chat/completions")
+            # Generate IDs
+            chat_id = self.generate_uuid()
+            message_id = self.generate_uuid()
+            
+            # Get last user message
+            user_message = ""
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    if isinstance(content, str):
+                        user_message = content
+                    elif isinstance(content, list):
+                        for item in content:
+                            if item.get("type") == "text":
+                                user_message = item.get("text", "")
+                                break
+                    if user_message:
+                        break
+            
+            if not user_message:
+                user_message = "Hello"
+            
+            # STEP 1: Create chat session
+            actual_chat_id = await self.create_chat_session(
+                token, chat_id, message_id, user_message, model
+            )
+            
+            # STEP 2: Send completion request with the chat session
+            body = {
+                "stream": stream,
+                "model": model,
+                "messages": messages,
+                "params": {},
+                "features": {
+                    "image_generation": False,
+                    "web_search": "search" in model.lower(),
+                    "auto_web_search": False,
+                    "preview_mode": False,
+                    "flags": [],
+                    "features": [],
+                    "enable_thinking": "thinking" in model.lower(),
+                },
+                "variables": {
+                    "{{USER_NAME}}": "Guest",
+                    "{{CURRENT_DATETIME}}": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                },
+                "chat_id": actual_chat_id,  # Use the actual chat_id from step 1
+                "id": self.generate_uuid(),
+            }
+            
+            headers = self.get_headers(token, actual_chat_id)
+            
+            logger.info(f"📡 Sending completion request with chat_id: {actual_chat_id}")
             
             response = await self.client.post(
                 f"{BASE_URL}/api/chat/completions",
@@ -326,21 +227,91 @@ class ZAIClaudeCodeBridge:
             
             if response.status_code != 200:
                 error_text = response.text
-                logger.error(f"❌ Z.AI error ({response.status_code}): {error_text[:200]}")
+                logger.error(f"❌ Completion failed ({response.status_code}): {error_text[:200]}")
                 raise HTTPException(
                     status_code=response.status_code,
-                    detail=f"Z.AI API error: {error_text}"
+                    detail=f"Completion failed: {error_text}"
                 )
             
-            # Return streaming response
-            if body["stream"]:
+            # Handle streaming response
+            if stream:
+                async def stream_response():
+                    try:
+                        content = ""
+                        async for line in response.aiter_lines():
+                            if not line or not line.startswith("data:"):
+                                continue
+                            
+                            chunk_str = line[5:].strip()
+                            if not chunk_str or chunk_str == "[DONE]":
+                                # Send final chunk
+                                finish_chunk = {
+                                    "id": f"chatcmpl-{self.generate_uuid()}",
+                                    "object": "chat.completion.chunk",
+                                    "created": int(datetime.now().timestamp()),
+                                    "model": model,
+                                    "choices": [{
+                                        "index": 0,
+                                        "delta": {},
+                                        "finish_reason": "stop"
+                                    }]
+                                }
+                                yield f"data: {json.dumps(finish_chunk)}\n\n"
+                                yield "data: [DONE]\n\n"
+                                break
+                            
+                            try:
+                                chunk = json.loads(chunk_str)
+                                
+                                if chunk.get("type") == "chat:completion":
+                                    data = chunk.get("data", {})
+                                    delta_content = data.get("delta_content", "")
+                                    
+                                    if delta_content:
+                                        content += delta_content
+                                        openai_chunk = {
+                                            "id": f"chatcmpl-{self.generate_uuid()}",
+                                            "object": "chat.completion.chunk",
+                                            "created": int(datetime.now().timestamp()),
+                                            "model": model,
+                                            "choices": [{
+                                                "index": 0,
+                                                "delta": {
+                                                    "role": "assistant",
+                                                    "content": delta_content
+                                                },
+                                                "finish_reason": None
+                                            }]
+                                        }
+                                        yield f"data: {json.dumps(openai_chunk)}\n\n"
+                            
+                            except json.JSONDecodeError:
+                                continue
+                    
+                    except Exception as e:
+                        logger.error(f"❌ Stream error: {e}")
+                        error_chunk = {
+                            "id": f"chatcmpl-{self.generate_uuid()}",
+                            "object": "chat.completion.chunk",
+                            "created": int(datetime.now().timestamp()),
+                            "model": model,
+                            "choices": [{
+                                "index": 0,
+                                "delta": {
+                                    "content": f"\n\n[Error: {str(e)}]"
+                                },
+                                "finish_reason": "stop"
+                            }]
+                        }
+                        yield f"data: {json.dumps(error_chunk)}\n\n"
+                        yield "data: [DONE]\n\n"
+                
                 return StreamingResponse(
-                    self.stream_response(response, model),
+                    stream_response(),
                     media_type="text/event-stream"
                 )
             else:
-                # Non-streaming not fully implemented yet
-                # For now, convert stream to complete response
+                # Non-streaming
                 content = ""
                 async for line in response.aiter_lines():
                     if line.startswith("data:"):
@@ -349,8 +320,7 @@ class ZAIClaudeCodeBridge:
                             try:
                                 chunk = json.loads(chunk_str)
                                 if chunk.get("type") == "chat:completion":
-                                    data = chunk.get("data", {})
-                                    delta = data.get("delta_content", "")
+                                    delta = chunk.get("data", {}).get("delta_content", "")
                                     if delta:
                                         content += delta
                             except:
@@ -388,52 +358,38 @@ class ZAIClaudeCodeBridge:
             raise HTTPException(status_code=500, detail=str(e))
 
 
-# FastAPI app
-app = FastAPI(title="Z.AI Claude Code Bridge", version="1.0.0")
-bridge = None  # Will be initialized in main()
+app = FastAPI(title="Z.AI Claude Code Bridge", version="2.0.0")
+bridge = None
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
-    """
-    OpenAI-compatible chat completions endpoint.
-    
-    Receives requests from Claude Code Router and forwards to Z.AI.
-    """
+    """OpenAI-compatible chat completions endpoint."""
     try:
         body = await request.json()
-        logger.info(f"📥 Received request: model={body.get('model')}")
+        logger.info(f"📥 Request: model={body.get('model')}")
         return await bridge.chat_completion(body)
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Request handling error: {e}", exc_info=True)
+        logger.error(f"❌ Error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/v1/models")
 async def list_models():
-    """List available models (for Claude Code Router compatibility)."""
+    """List available models."""
     return {
         "object": "list",
         "data": [
-            {
-                "id": "glm-4.5v",
-                "object": "model",
-                "created": 1704067200,
-                "owned_by": "z.ai"
-            },
-            {
-                "id": "0727-360B-API",
-                "object": "model",
-                "created": 1704067200,
-                "owned_by": "z.ai"
-            },
+            {"id": "glm-4.5v", "object": "model", "owned_by": "z.ai"},
+            {"id": "GLM-4.5", "object": "model", "owned_by": "z.ai"},
+            {"id": "GLM-4.6", "object": "model", "owned_by": "z.ai"},
         ]
     }
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "ok", "service": "zai-claude-code-bridge"}
+    """Health check."""
+    return {"status": "ok", "service": "zai-claude-code-bridge", "version": "2.0.0"}
 
 
 def main():
@@ -444,29 +400,22 @@ def main():
     parser.add_argument("--host", default=os.getenv("ZAIMCP_HOST", "127.0.0.1"),
                         help="Server host (default: 127.0.0.1)")
     parser.add_argument("--token", default=os.getenv("ZAIMCP_TOKEN"),
-                        help="Z.AI authentication token (optional)")
+                        help="Z.AI token (optional)")
     
     args = parser.parse_args()
     
-    # Initialize bridge
     global bridge
     bridge = ZAIClaudeCodeBridge(token=args.token)
     
-    # Start server
     logger.info("=" * 60)
-    logger.info("🚀 Z.AI Claude Code Bridge Starting...")
-    logger.info(f"📡 Listening on: http://{args.host}:{args.port}")
-    logger.info(f"🔐 Authentication: {'Token' if args.token else 'Anonymous'}")
-    logger.info(f"🌐 Z.AI Backend: {BASE_URL}")
-    logger.info(f"📌 API Version: {X_FE_VERSION}")
+    logger.info("🚀 Z.AI Claude Code Bridge v2.0 - WORKING VERSION")
+    logger.info(f"📡 Listening: http://{args.host}:{args.port}")
+    logger.info(f"🔐 Auth: {'Token' if args.token else 'Anonymous'}")
+    logger.info(f"📌 Version: {X_FE_VERSION}")
+    logger.info("✅ Two-step chat creation implemented")
     logger.info("=" * 60)
     
-    uvicorn.run(
-        app,
-        host=args.host,
-        port=args.port,
-        log_level="info"
-    )
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 
 if __name__ == "__main__":
