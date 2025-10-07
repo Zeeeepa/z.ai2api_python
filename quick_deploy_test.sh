@@ -96,6 +96,68 @@ stop_server() {
 }
 
 ################################################################################
+# Check Prerequisites
+################################################################################
+
+check_prerequisites() {
+    print_header "Checking Prerequisites"
+    
+    # Check Python
+    print_step "Checking Python installation..."
+    if command -v python3 &> /dev/null; then
+        PYTHON_CMD="python3"
+        PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+        print_success "Python found: $PYTHON_VERSION"
+    elif command -v python &> /dev/null; then
+        PYTHON_CMD="python"
+        PYTHON_VERSION=$(python --version 2>&1 | awk '{print $2}')
+        print_success "Python found: $PYTHON_VERSION"
+    else
+        print_error "Python is not installed!"
+        print_info "Please install Python 3.11 or higher:"
+        print_info "  Ubuntu/Debian: sudo apt install python3 python3-pip"
+        print_info "  CentOS/RHEL: sudo yum install python3 python3-pip"
+        print_info "  MacOS: brew install python3"
+        exit 1
+    fi
+    
+    # Check pip
+    print_step "Checking pip installation..."
+    if command -v pip3 &> /dev/null; then
+        PIP_CMD="pip3"
+        print_success "pip3 found"
+    elif command -v pip &> /dev/null; then
+        PIP_CMD="pip"
+        print_success "pip found"
+    elif $PYTHON_CMD -m pip --version &> /dev/null; then
+        PIP_CMD="$PYTHON_CMD -m pip"
+        print_success "pip module found"
+    else
+        print_error "pip is not installed!"
+        print_info "Installing pip..."
+        curl -sS https://bootstrap.pypa.io/get-pip.py | $PYTHON_CMD
+        
+        if $PYTHON_CMD -m pip --version &> /dev/null; then
+            PIP_CMD="$PYTHON_CMD -m pip"
+            print_success "pip installed successfully"
+        else
+            print_error "Failed to install pip"
+            exit 1
+        fi
+    fi
+    
+    # Check curl
+    if ! command -v curl &> /dev/null; then
+        print_warning "curl is not installed - some features may not work"
+        print_info "Install with: sudo apt install curl (Ubuntu/Debian)"
+    fi
+    
+    echo ""
+    print_info "Using Python: $PYTHON_CMD"
+    print_info "Using pip: $PIP_CMD"
+}
+
+################################################################################
 # Step 1: Install Dependencies
 ################################################################################
 
@@ -103,16 +165,27 @@ install_dependencies() {
     print_header "STEP 1: Installing Dependencies"
     
     print_step "Installing Python dependencies..."
-    pip3 install -q -r requirements.txt
-    print_success "Python dependencies installed"
-    
-    print_step "Installing Playwright browsers..."
-    if ! command -v playwright &> /dev/null; then
-        print_error "Playwright not found. Installing..."
-        pip3 install playwright
+    if [ -f requirements.txt ]; then
+        $PIP_CMD install -q -r requirements.txt 2>&1 | grep -E "Successfully|ERROR" || true
+        print_success "Python dependencies installed"
+    else
+        print_warning "requirements.txt not found, installing minimal dependencies..."
+        $PIP_CMD install -q openai httpx fastapi uvicorn playwright 2>&1 | grep -E "Successfully|ERROR" || true
+        print_success "Minimal dependencies installed"
     fi
     
-    playwright install chromium > /dev/null 2>&1 || true
+    print_step "Installing Playwright browsers..."
+    if $PYTHON_CMD -m playwright --version &> /dev/null; then
+        print_info "Playwright already installed, installing browsers..."
+    else
+        print_info "Installing Playwright..."
+        $PIP_CMD install -q playwright
+    fi
+    
+    $PYTHON_CMD -m playwright install chromium > /dev/null 2>&1 || {
+        print_warning "Could not install Playwright browsers automatically"
+        print_info "You may need to run: $PYTHON_CMD -m playwright install chromium"
+    }
     print_success "Playwright browsers installed"
 }
 
@@ -146,13 +219,11 @@ configure_providers() {
     fi
     
     # Validate JSON
-    if command -v python3 &> /dev/null; then
-        if python3 -c "import json; json.load(open('$SCRIPT_DIR/config/providers.json'))" 2>/dev/null; then
-            print_success "Configuration file is valid JSON"
-        else
-            print_error "Configuration file has invalid JSON syntax"
-            exit 1
-        fi
+    if ${PYTHON_CMD:-python3} -c "import json; json.load(open('$SCRIPT_DIR/config/providers.json'))" 2>/dev/null; then
+        print_success "Configuration file is valid JSON"
+    else
+        print_error "Configuration file has invalid JSON syntax"
+        exit 1
     fi
 }
 
@@ -173,7 +244,7 @@ start_server() {
     
     # Start server in background
     cd "$SCRIPT_DIR"
-    nohup python3 main.py > "$SERVER_LOG" 2>&1 &
+    nohup ${PYTHON_CMD:-python3} main.py > "$SERVER_LOG" 2>&1 &
     echo $! > "$PID_FILE"
     
     # Wait for server to be ready
@@ -207,7 +278,7 @@ health_check() {
     
     if response=$(curl -s http://localhost:$SERVER_PORT/); then
         print_success "Server is responding"
-        echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+        echo "$response" | ${PYTHON_CMD:-python3} -m json.tool 2>/dev/null || echo "$response"
     else
         print_error "Server health check failed"
         return 1
@@ -217,11 +288,11 @@ health_check() {
     print_step "Listing available models..."
     
     if models=$(curl -s http://localhost:$SERVER_PORT/v1/models); then
-        model_count=$(echo "$models" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['data']))" 2>/dev/null || echo "unknown")
+        model_count=$(echo "$models" | ${PYTHON_CMD:-python3} -c "import json,sys; print(len(json.load(sys.stdin)['data']))" 2>/dev/null || echo "unknown")
         print_success "Found $model_count models available"
         
         echo ""
-        echo "$models" | python3 -c "
+        echo "$models" | ${PYTHON_CMD:-python3} -c "
 import json, sys
 data = json.load(sys.stdin)
 print('📋 Available Models:')
@@ -258,10 +329,10 @@ test_single_model() {
     # Check if response contains error
     if echo "$response" | grep -q "error\|401\|Invalid"; then
         print_warning "$model - Authentication required"
-        echo "     $(echo "$response" | python3 -c "import json,sys; print(json.load(sys.stdin).get('error', {}).get('message', 'Authentication needed'))" 2>/dev/null || echo "Auth needed")"
+        echo "     $(echo "$response" | ${PYTHON_CMD:-python3} -c "import json,sys; print(json.load(sys.stdin).get('error', {}).get('message', 'Authentication needed'))" 2>/dev/null || echo "Auth needed")"
         return 1
     elif echo "$response" | grep -q "content"; then
-        local content=$(echo "$response" | python3 -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'][:80] + '...')" 2>/dev/null || echo "Response received")
+        local content=$(echo "$response" | ${PYTHON_CMD:-python3} -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'][:80] + '...')" 2>/dev/null || echo "Response received")
         print_success "$model - Response: $content"
         return 0
     else
@@ -321,7 +392,7 @@ run_comprehensive_tests() {
     
     # Run AllCall.py and capture output
     cd "$SCRIPT_DIR"
-    python3 AllCall.py 2>&1 | tee "$TEST_LOG"
+    ${PYTHON_CMD:-python3} AllCall.py 2>&1 | tee "$TEST_LOG"
     
     echo ""
     print_success "Comprehensive tests completed!"
@@ -471,6 +542,9 @@ main() {
         read -p "Press Enter to continue or Ctrl+C to cancel..."
     fi
     
+    # Check prerequisites first
+    check_prerequisites
+    
     # Execute steps
     install_dependencies
     configure_providers
@@ -526,4 +600,3 @@ trap 'echo ""; print_warning "Interrupted. Server is still running."; exit 130' 
 
 # Run main function
 main "$@"
-
