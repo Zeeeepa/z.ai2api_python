@@ -18,13 +18,17 @@ This repository includes a single script that handles everything: installation, 
 
 The script automatically:
 
-1. ✅ **Installs all dependencies** (Python packages, Playwright browsers)
-2. ✅ **Configures providers** (creates config from template if needed)
-3. ✅ **Starts the server** on port 8080
-4. ✅ **Runs health checks** to verify server is working
-5. ✅ **Tests individual models** from each provider
-6. ✅ **Runs comprehensive tests** on all 42+ models concurrently
-7. ✅ **Displays detailed results** with error analysis
+1. ✅ **Checks prerequisites** (Python, pip, curl)
+2. ✅ **Creates virtual environment** (if needed for Python 3.12+)
+3. ✅ **Installs all dependencies** (Python packages, Playwright browsers)
+4. ✅ **Configures providers** (creates config from template if needed)
+5. ✅ **Starts the server** on port 8080
+6. ✅ **Runs health checks** to verify server is working
+7. ✅ **Tests individual models** from each provider
+8. ✅ **Runs comprehensive tests** on all 42+ models concurrently
+9. ✅ **Displays detailed results** with error analysis
+
+**Note**: On Python 3.12+ (PEP 668), the script automatically creates and uses a virtual environment to avoid system package conflicts.
 
 ### Example Output
 
@@ -372,4 +376,3 @@ For issues or questions:
 ## Summary
 
 **TL;DR**: Just run `./quick_deploy_test.sh` and follow the prompts. The script handles everything from installation to testing and result viewing. Your server will be running on http://localhost:8080 with all 42+ models ready to test!
-

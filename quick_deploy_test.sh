@@ -115,35 +115,75 @@ check_prerequisites() {
     else
         print_error "Python is not installed!"
         print_info "Please install Python 3.11 or higher:"
-        print_info "  Ubuntu/Debian: sudo apt install python3 python3-pip"
-        print_info "  CentOS/RHEL: sudo yum install python3 python3-pip"
+        print_info "  Ubuntu/Debian: sudo apt install python3 python3-venv python3-full"
+        print_info "  CentOS/RHEL: sudo yum install python3"
         print_info "  MacOS: brew install python3"
         exit 1
     fi
     
-    # Check pip
-    print_step "Checking pip installation..."
-    if command -v pip3 &> /dev/null; then
-        PIP_CMD="pip3"
-        print_success "pip3 found"
-    elif command -v pip &> /dev/null; then
+    # Check if we're in a virtual environment or need to create one
+    VENV_DIR="$SCRIPT_DIR/.venv"
+    
+    if [ -n "$VIRTUAL_ENV" ]; then
+        print_success "Already in virtual environment: $VIRTUAL_ENV"
+        PYTHON_CMD="python"
         PIP_CMD="pip"
-        print_success "pip found"
-    elif $PYTHON_CMD -m pip --version &> /dev/null; then
-        PIP_CMD="$PYTHON_CMD -m pip"
-        print_success "pip module found"
+    elif [ -d "$VENV_DIR" ]; then
+        print_step "Found existing virtual environment, activating..."
+        source "$VENV_DIR/bin/activate"
+        PYTHON_CMD="python"
+        PIP_CMD="pip"
+        print_success "Virtual environment activated"
     else
-        print_error "pip is not installed!"
-        print_info "Installing pip..."
-        curl -sS https://bootstrap.pypa.io/get-pip.py | $PYTHON_CMD
-        
-        if $PYTHON_CMD -m pip --version &> /dev/null; then
+        # Check if system has pip available
+        if command -v pip3 &> /dev/null; then
+            print_success "pip3 found - checking if we need virtual environment..."
+            # Try to use system pip, but catch PEP 668 errors
+            if pip3 --version &> /dev/null; then
+                PIP_CMD="pip3"
+            fi
+        elif $PYTHON_CMD -m pip --version &> /dev/null 2>&1; then
+            print_success "pip module found - checking if we need virtual environment..."
             PIP_CMD="$PYTHON_CMD -m pip"
-            print_success "pip installed successfully"
-        else
-            print_error "Failed to install pip"
-            exit 1
         fi
+        
+        # Check for PEP 668 (externally-managed-environment)
+        print_step "Checking Python environment management..."
+        if $PYTHON_CMD -m pip --version 2>&1 | grep -q "externally-managed\|break-system-packages"; then
+            print_warning "Python environment is externally managed (PEP 668)"
+            print_info "Creating virtual environment for safe package installation..."
+            
+            # Check if python3-venv is installed
+            if ! $PYTHON_CMD -m venv --help &> /dev/null; then
+                print_error "python3-venv is not installed!"
+                print_info "Install it with: sudo apt install python3-venv python3-full"
+                exit 1
+            fi
+            
+            # Create virtual environment
+            print_step "Creating virtual environment in $VENV_DIR..."
+            $PYTHON_CMD -m venv "$VENV_DIR"
+            
+            if [ $? -eq 0 ]; then
+                print_success "Virtual environment created"
+                print_step "Activating virtual environment..."
+                source "$VENV_DIR/bin/activate"
+                PYTHON_CMD="python"
+                PIP_CMD="pip"
+                print_success "Virtual environment activated"
+            else
+                print_error "Failed to create virtual environment"
+                exit 1
+            fi
+        else
+            print_success "Python environment is compatible"
+        fi
+    fi
+    
+    # Verify pip is now available
+    if ! $PIP_CMD --version &> /dev/null; then
+        print_error "pip is still not available after setup"
+        exit 1
     fi
     
     # Check curl
@@ -155,6 +195,9 @@ check_prerequisites() {
     echo ""
     print_info "Using Python: $PYTHON_CMD"
     print_info "Using pip: $PIP_CMD"
+    if [ -n "$VIRTUAL_ENV" ]; then
+        print_info "Virtual environment: $VIRTUAL_ENV"
+    fi
 }
 
 ################################################################################
