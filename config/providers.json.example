@@ -1,0 +1,39 @@
+{
+  "providers": [
+    {
+      "name": "zai",
+      "enabled": true,
+      "baseUrl": "https://chat.z.ai",
+      "loginUrl": "https://chat.z.ai/auth",
+      "chatUrl": "https://chat.z.ai",
+      "email": "<ZAI_EMAIL>",
+      "password": "<ZAI_PASSWORD>"
+    },
+    {
+      "name": "k2think",
+      "enabled": true,
+      "baseUrl": "https://www.k2think.ai",
+      "loginUrl": "https://www.k2think.ai/login",
+      "chatUrl": "https://www.k2think.ai/chat",
+      "email": "<K2_EMAIL>",
+      "password": "<K2_PASSWORD>"
+    },
+    {
+      "name": "qwen",
+      "enabled": true,
+      "baseUrl": "https://chat.qwen.ai",
+      "loginUrl": "https://chat.qwen.ai/auth?action=signin",
+      "chatUrl": "https://chat.qwen.ai",
+      "email": "<QWEN_EMAIL>",
+      "password": "<QWEN_PASSWORD>"
+    }
+  ],
+  "cloudflare": {
+    "account_api_worker": "<CLOUDFLARE_ACCOUNT_API_WORKER>",
+    "api_key": "<CLOUDFLARE_API_KEY>",
+    "account_id": "<CLOUDFLARE_ACCOUNT_ID>",
+    "domain": "<CLOUDFLARE_DOMAIN>",
+    "email": "<CLOUDFLARE_EMAIL>"
+  }
+}
+
