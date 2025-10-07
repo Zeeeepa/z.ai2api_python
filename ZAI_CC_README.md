@@ -1,388 +1,501 @@
-# Z.AI Claude Code Integration
+# 🚀 Z.AI Claude Code Integration
 
-This script (`zai_cc.py`) automatically sets up Claude Code to work with Z.AI through the z.ai2api_python proxy service.
+Complete guide for using Z.AI GLM models with Claude Code via the standalone launcher.
 
-## 🎯 What It Does
+## 📋 Table of Contents
 
-The script automates the complete setup process for integrating Z.AI with Claude Code:
+- [Quick Start](#-quick-start)
+- [What Does It Do?](#-what-does-it-do)
+- [Prerequisites](#-prerequisites)
+- [Usage](#-usage)
+- [Command-Line Options](#-command-line-options)
+- [Advanced Usage](#-advanced-usage)
+- [Troubleshooting](#-troubleshooting)
+- [Model Reference](#-model-reference)
 
-1. ✅ Creates `.claude-code-router` directory structure
-2. ✅ Generates the Z.AI transformer plugin (`zai.js`)
-3. ✅ Creates Claude Code Router configuration (`config.js`)
-4. ✅ Starts the Z.AI API proxy server
-5. ✅ Launches Claude Code with Z.AI integration
+## ⚡ Quick Start
 
-## 📋 Prerequisites
-
-### Required
-- **Python 3.9+** - For running the z.ai2api_python service
-- **Node.js** - For running Claude Code and the transformer plugin
-- **npm** - For installing Claude Code
-
-### Optional
-- **Claude Code** - Will prompt to install if not found
-- **Z.AI Token** - Can use anonymous mode if not provided
-
-## 🚀 Quick Start
-
-### 1. Install Dependencies
+### One-Line Setup
 
 ```bash
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Or using uv (recommended)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync
-
-# Install Claude Code (if not installed)
-npm install -g claude-code
-```
-
-### 2. Configure Environment (Optional)
-
-Create a `.env` file or set environment variables:
-
-```bash
-# Optional: Set your Z.AI token
-export AUTH_TOKEN="sk-your-api-key"
-
-# Or use anonymous mode (default)
-export ANONYMOUS_MODE="true"
-```
-
-### 3. Run the Setup Script
-
-```bash
-# Make executable
-chmod +x zai_cc.py
-
-# Run the setup
 python zai_cc.py
 ```
 
-The script will:
-- ✓ Check for Node.js installation
-- ✓ Create configuration directories
-- ✓ Generate the Z.AI plugin
-- ✓ Create the Claude Code Router config
-- ✓ Start the API proxy server
-- ✓ Launch Claude Code
+That's it! The script will:
+1. ✅ Configure your environment
+2. ✅ Start the Z.AI API server
+3. ✅ Configure Claude Code Router
+4. ✅ Start Claude Code Router
+5. ✅ Test the integration
+6. ✅ Keep everything running until you press Ctrl+C
 
-### 4. Test Claude Code
-
-Once Claude Code starts, ask it:
-```
-What model are you?
-```
-
-Expected response should mention **GLM-4.6** (the latest model with 200K context) or similar Z.AI models.
-
-## 📁 Generated Files
-
-The script creates the following files:
+### What You'll See
 
 ```
-~/.claude-code-router/
-├── config.js           # Claude Code Router configuration
-└── plugins/
-    └── zai.js         # Z.AI transformer plugin
+======================================================================
+🚀 Z.AI Claude Code Router Launcher
+======================================================================
+ℹ️  API Port: 8080
+ℹ️  CCR Port: 3456
+ℹ️  Default Model: GLM-4.5
+
+[1/6] Configuring Environment
+✅ Created .env configuration
+
+[2/6] Creating Claude Code Router Plugin
+✅ Created plugin: /Users/you/.claude-code-router/plugins/zai.js
+
+[3/6] Creating Claude Code Router Configuration
+✅ Created config: /Users/you/.claude-code-router/config.js
+
+[4/6] Starting Z.AI API Server
+✅ Z.AI API server started successfully
+
+[5/6] Testing API Connection
+✅ API test successful!
+ℹ️  Model: GLM-4.5
+ℹ️  Response: I am GLM-4.5, a large language model...
+
+[6/6] Starting Claude Code Router
+✅ Claude Code Router started on port 3456
+
+======================================================================
+✅ Setup Complete!
+======================================================================
+🎯 Next Steps:
+   1. Open Claude Code in your editor
+   2. Ask: 'What model are you?'
+   3. You should see GLM model responses!
+
+⚠️  Press Ctrl+C to stop all services and exit
 ```
 
-### config.js
-Contains the routing configuration that tells Claude Code to use the Z.AI service through the local proxy.
+## 🎯 What Does It Do?
 
-### plugins/zai.js
-Transformer plugin that:
-- Fetches anonymous tokens from Z.AI
-- Converts OpenAI format to Z.AI format
-- Handles streaming responses
-- Supports tool calling
-- Manages system prompts
+The `zai_cc.py` script is a **complete lifecycle manager** that automates everything:
 
-## ⚙️ Configuration
+### Automatic Configuration
 
-### Default Configuration
+#### 1. **Environment Setup** (`.env`)
+```bash
+# Automatically creates with optimal settings:
+LISTEN_PORT=8080
+DEBUG_LOGGING=true
+ANONYMOUS_MODE=true
+SKIP_AUTH_TOKEN=true
+# ... and all model configurations
+```
 
+#### 2. **Claude Code Router Config** (`~/.claude-code-router/config.js`)
 ```javascript
 {
   "Providers": [{
     "name": "GLM",
     "api_base_url": "http://127.0.0.1:8080/v1/chat/completions",
-    "api_key": "sk-your-api-key",
-    "models": ["GLM-4.6", "GLM-4.5", "GLM-4.5-Air", "GLM-4.5V"],
-    "transformers": {
-      "use": ["zai"]
-    }
+    "models": ["GLM-4.5", "GLM-4.6", "GLM-4.5V", ...],
+    "transformers": { "use": ["zai"] }
   }],
   "Router": {
-    "default": "GLM,GLM-4.6",         // Latest model with 200K context
-    "background": "GLM,GLM-4.5-Air",  // Lightweight for background tasks
-    "think": "GLM,GLM-4.6",           // Best for reasoning
-    "longContext": "GLM,GLM-4.6",     // 200K context window
-    "image": "GLM,GLM-4.5V"           // Vision/multimodal tasks
+    "default": "GLM,GLM-4.5",
+    "think": "GLM,GLM-4.5-Thinking",
+    "longContext": "GLM,GLM-4.6",
+    "image": "GLM,GLM-4.5V"
   }
 }
 ```
 
-### Customization
+#### 3. **CCR Plugin** (`~/.claude-code-router/plugins/zai.js`)
+Automatically creates the Z.AI transformer plugin for request/response handling.
 
-You can modify the generated `~/.claude-code-router/config.js` to:
-- Change the API endpoint
-- Add more models
-- Configure different routing strategies
-- Enable logging for debugging
+### Service Management
 
-## 🔧 Troubleshooting
+#### Startup
+- ✅ Starts Z.AI API server (`python main.py`)
+- ✅ Starts Claude Code Router (`ccr --dangerously-skip-update`)
+- ✅ Monitors both processes
+- ✅ Tests connectivity
 
-### Issue: "Claude Code not found"
-**Solution**: Install Claude Code
+#### Shutdown (Automatic on Exit)
+- ✅ Gracefully stops Claude Code Router
+- ✅ Gracefully stops API server
+- ✅ Cleans up all resources
+- ✅ Handles Ctrl+C / SIGTERM / SIGINT
+
+## 📦 Prerequisites
+
+### Required
+
+1. **Python 3.8+** with dependencies:
+   ```bash
+   pip install fastapi uvicorn httpx pydantic pydantic-settings python-dotenv loguru
+   ```
+
+2. **Claude Code Router**:
+   ```bash
+   npm install -g @zinkawaii/claude-code-router
+   ```
+
+3. **OpenAI Python SDK** (optional, for testing):
+   ```bash
+   pip install openai
+   ```
+
+### Verify Installation
+
 ```bash
-npm install -g claude-code
+# Check Python
+python --version
+
+# Check CCR
+ccr --version
+
+# Check if in correct directory
+ls main.py  # Should exist
 ```
 
-### Issue: "Node.js not found"
-**Solution**: Install Node.js
+## 💻 Usage
+
+### Basic Usage
+
+#### Full Setup (Recommended)
 ```bash
-# Ubuntu/Debian
-curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-sudo apt-get install -y nodejs
+python zai_cc.py
+```
+Starts everything and keeps it running until Ctrl+C.
 
-# macOS
-brew install node
+#### Test Only (No CCR)
+```bash
+python zai_cc.py --test-only
+```
+Just tests the API, doesn't start Claude Code Router.
 
-# Windows
-# Download from https://nodejs.org/
+#### Use Existing Server
+```bash
+python zai_cc.py --skip-server
+```
+Assumes API server is already running, only starts CCR.
+
+### Advanced Usage
+
+#### Custom Ports
+```bash
+python zai_cc.py --port 9000 --ccr-port 4000
 ```
 
-### Issue: "API server not starting"
-**Solution**: Start the server manually
+#### Different Default Model
 ```bash
+python zai_cc.py --model GLM-4.6
+```
+
+#### No Automatic Cleanup
+```bash
+python zai_cc.py --no-cleanup
+```
+Services keep running after script exits.
+
+## 🎛️ Command-Line Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--port PORT` | Z.AI API server port | `8080` |
+| `--ccr-port PORT` | Claude Code Router port | `3456` |
+| `--model MODEL` | Default model for CCR router | `GLM-4.5` |
+| `--skip-server` | Don't start API server (use existing) | `false` |
+| `--skip-ccr` | Don't start Claude Code Router | `false` |
+| `--test-only` | Test API without starting CCR | `false` |
+| `--no-cleanup` | Don't stop services on exit | `false` |
+
+### Environment Variables
+
+You can also configure via environment variables:
+
+```bash
+export ZAI_API_PORT=9000
+export CCR_PORT=4000
+python zai_cc.py
+```
+
+## 🔧 Advanced Usage
+
+### Running in Background
+
+#### Using nohup
+```bash
+nohup python zai_cc.py --no-cleanup > launcher.log 2>&1 &
+```
+
+#### Stop Background Services
+```bash
+pkill -f "python zai_cc.py"
+pkill -f "python main.py"
+pkill -f "ccr"
+```
+
+### Development Workflow
+
+#### 1. Test API First
+```bash
+python zai_cc.py --test-only
+```
+Verify API is working before starting CCR.
+
+#### 2. Use Existing Server
+```bash
+# Terminal 1: Start API manually
 python main.py
+
+# Terminal 2: Start CCR via launcher
+python zai_cc.py --skip-server
 ```
 
-Check if port 8080 is already in use:
+#### 3. Debug Mode
 ```bash
+# Check what's happening
+python zai_cc.py --test-only
+tail -f launcher.log  # If running in background
+```
+
+### Multiple Instances
+
+Run multiple instances with different ports:
+
+```bash
+# Instance 1
+python zai_cc.py --port 8080 --ccr-port 3456 &
+
+# Instance 2
+python zai_cc.py --port 8081 --ccr-port 3457 &
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+#### 1. "ccr not found"
+
+**Problem:** Claude Code Router not installed.
+
+**Solution:**
+```bash
+npm install -g @zinkawaii/claude-code-router
+ccr --version  # Verify
+```
+
+#### 2. "Port already in use"
+
+**Problem:** Port 8080 or 3456 is occupied.
+
+**Solution:**
+```bash
+# Check what's using the port
 lsof -i :8080
-# or
-netstat -tulpn | grep 8080
+lsof -i :3456
+
+# Kill the process or use different port
+python zai_cc.py --port 9000 --ccr-port 4000
 ```
 
-### Issue: "Connection refused"
-**Solution**: Verify the API server is running
+#### 3. "Server failed to start"
+
+**Problem:** Missing dependencies or configuration error.
+
+**Solution:**
 ```bash
-curl http://127.0.0.1:8080/
-```
+# Install dependencies
+pip install -r requirements.txt
 
-Expected response:
-```json
-{"message": "OpenAI Compatible API Server"}
-```
+# Check main.py exists
+ls main.py
 
-### Issue: Claude Code shows errors
-**Solution**: Enable debug logging
-
-Edit `~/.claude-code-router/config.js`:
-```javascript
-{
-  "LOG": true,
-  "LOG_LEVEL": "debug",
-  ...
-}
-```
-
-## 🔐 Authentication Modes
-
-### Anonymous Mode (Default)
-```bash
-export ANONYMOUS_MODE="true"
-python zai_cc.py
-```
-
-The plugin automatically fetches temporary tokens from Z.AI. No authentication needed!
-
-### Authenticated Mode
-```bash
-# Set your Z.AI token
-export AUTH_TOKEN="your-zai-token"
-export ANONYMOUS_MODE="false"
-python zai_cc.py
-```
-
-## 🌟 Features
-
-### Supported Capabilities
-- ✅ Streaming responses
-- ✅ Tool/Function calling
-- ✅ System prompts
-- ✅ Multi-turn conversations
-- ✅ Thinking/reasoning mode
-- ✅ Long context handling
-- ✅ Image understanding (GLM-4.5V)
-
-### Z.AI Models Available
-- **GLM-4.6**: 🚀 **Latest flagship model** - 200K context window, superior coding performance, advanced reasoning
-- **GLM-4.5**: Previous flagship general-purpose model with 128K context
-- **GLM-4.5-Air**: Faster, lightweight variant for quick tasks
-- **GLM-4.5V**: 🖼️ **Multimodal vision model** - Image understanding and visual reasoning
-
-## 📚 Advanced Usage
-
-### Manual Configuration
-
-If you prefer manual setup, follow these steps:
-
-1. **Create directories**:
-```bash
-mkdir -p ~/.claude-code-router/plugins
-```
-
-2. **Copy the plugin**:
-```bash
-cp /path/to/zai.js ~/.claude-code-router/plugins/
-```
-
-3. **Create config.js**:
-```bash
-cat > ~/.claude-code-router/config.js << 'EOF'
-module.exports = {
-  // Your configuration here
-};
-EOF
-```
-
-4. **Start the API server**:
-```bash
+# Try manual start to see error
 python main.py
 ```
 
-5. **Run Claude Code**:
+#### 4. "API test failed"
+
+**Problem:** Server started but not responding.
+
+**Solution:**
 ```bash
-claude-code
+# Wait longer for server startup
+sleep 10
+
+# Test manually
+curl http://127.0.0.1:8080/
+
+# Check logs
+tail -f nohup.out  # or wherever logs are
 ```
 
-### Multiple Providers
+#### 5. "Invalid API key" (even with SKIP_AUTH_TOKEN)
 
-You can configure multiple AI providers in `config.js`:
+**Problem:** .env not loaded properly or server needs restart.
+
+**Solution:**
+```bash
+# Stop all services
+pkill -f "python main.py"
+
+# Remove old .env
+rm .env
+
+# Run launcher again
+python zai_cc.py
+```
+
+### Debug Checklist
+
+When something goes wrong:
+
+```bash
+# 1. Check if services are running
+ps aux | grep "python main.py"
+ps aux | grep "ccr"
+
+# 2. Check ports
+netstat -an | grep 8080
+netstat -an | grep 3456
+
+# 3. Test API manually
+curl http://127.0.0.1:8080/
+
+# 4. Check configurations
+cat .env
+cat ~/.claude-code-router/config.js
+
+# 5. Check logs
+tail -f nohup.out
+```
+
+### Getting Help
+
+If you're still stuck:
+
+1. Run with `--test-only` to isolate issues
+2. Check server logs for error messages
+3. Verify all prerequisites are installed
+4. Try manual setup to identify the problem:
+   ```bash
+   # Start API manually
+   python main.py
+   
+   # In another terminal, test
+   curl http://127.0.0.1:8080/
+   
+   # Start CCR manually
+   ccr --dangerously-skip-update
+   ```
+
+## 📊 Model Reference
+
+### Available Models
+
+| Model | Context | Parameters | Best For |
+|-------|---------|-----------|----------|
+| **GLM-4.5** | 128K | 360B | General purpose |
+| **GLM-4.5-Air** | 128K | 106B | Speed & efficiency |
+| **GLM-4.6** | 200K | ~360B | Long documents |
+| **GLM-4.5V** | 128K | 201B | Vision/images |
+| **GLM-4.5-Thinking** | 128K | 360B | Complex reasoning |
+| **GLM-4.5-Search** | 128K | 360B | Web-enhanced |
+
+### Model Routing
+
+The launcher automatically configures Claude Code Router to use optimal models:
 
 ```javascript
 {
-  "Providers": [
-    {
-      "name": "GLM",
-      "api_base_url": "http://127.0.0.1:8080/v1/chat/completions",
-      "models": ["GLM-4.5"],
-      "transformers": { "use": ["zai"] }
-    },
-    {
-      "name": "K2Think",
-      // Additional provider config
-    }
-  ]
+  "default": "GLM,GLM-4.5",        // General queries
+  "think": "GLM,GLM-4.5-Thinking", // Reasoning tasks
+  "longContext": "GLM,GLM-4.6",    // Long documents
+  "image": "GLM,GLM-4.5V"          // Image analysis
 }
 ```
 
-## 🤝 Contributing
+### Switching Models
 
-Found an issue or want to improve the setup script? Contributions are welcome!
+#### Via Command Line
+```bash
+python zai_cc.py --model GLM-4.6
+```
+
+#### In Claude Code
+Just ask using the model name:
+```
+[Use GLM-4.6] Analyze this long document...
+```
+
+#### Manual Configuration
+Edit `~/.claude-code-router/config.js` and restart CCR.
+
+## 🎓 Best Practices
+
+### Development
+- ✅ Use `--test-only` first to verify API
+- ✅ Enable `DEBUG_LOGGING=true` in .env
+- ✅ Check logs regularly
+- ✅ Use `--skip-server` for faster CCR restarts
+
+### Production
+- ✅ Use reverse proxy (nginx/caddy) for HTTPS
+- ✅ Set proper `AUTH_TOKEN` value
+- ✅ Disable `SKIP_AUTH_TOKEN`
+- ✅ Monitor with systemd or supervisor
+- ✅ Set up log rotation
+
+### Performance
+- ✅ Use `GLM-4.5-Air` for speed
+- ✅ Use `GLM-4.6` only for long contexts
+- ✅ Enable caching if supported
+- ✅ Monitor token usage
+
+## 📝 Examples
+
+### Example 1: Quick Test
+```bash
+# Test without starting CCR
+python zai_cc.py --test-only
+```
+
+### Example 2: Custom Configuration
+```bash
+# Use port 9000, GLM-4.6 as default
+python zai_cc.py --port 9000 --model GLM-4.6
+```
+
+### Example 3: Development Setup
+```bash
+# Terminal 1: Start API with debug
+DEBUG_LOGGING=true python main.py
+
+# Terminal 2: Start CCR only
+python zai_cc.py --skip-server
+```
+
+### Example 4: Background Service
+```bash
+# Start in background
+nohup python zai_cc.py --no-cleanup > ~/zai_launcher.log 2>&1 &
+
+# Check status
+tail -f ~/zai_launcher.log
+
+# Stop when done
+pkill -f "python zai_cc.py"
+```
+
+## 🔗 Links
+
+- **Repository:** https://github.com/Zeeeepa/z.ai2api_python
+- **Branch:** `CC`
+- **Z.AI Official:** https://chat.z.ai
+- **Claude Code Router:** https://github.com/zinkawaii/claude-code-router
 
 ## 📄 License
 
-MIT License - See LICENSE file for details
-
-## 🔗 Related Resources
-
-- [Z.AI Official Website](https://chat.z.ai)
-- [Claude Code Router](https://github.com/your-repo/claude-code-router)
-- [z.ai2api_python](https://github.com/ZyphrZero/z.ai2api_python)
-
-## 💡 Tips
-
-1. **First Run**: The first API call may take a few seconds as it fetches the anonymous token
-2. **Token Caching**: Tokens are cached for better performance
-3. **Rate Limits**: Be mindful of Z.AI rate limits when using anonymous mode
-4. **Model Selection**: 
-   - Use `GLM-4.6` for best coding/reasoning performance (200K context)
-   - Use `GLM-4.5-Air` for faster, lightweight responses
-   - Use `GLM-4.5V` for any vision/image-related tasks
-5. **Long Context**: GLM-4.6 supports up to 200K tokens - perfect for large codebases
-6. **Vision Tasks**: GLM-4.5V can analyze screenshots, diagrams, and images
-
-## ❓ FAQ
-
-**Q: Do I need a Z.AI account?**
-A: No! Anonymous mode works without an account. However, authenticated mode provides better rate limits.
-
-**Q: Can I use this with other Claude Code projects?**
-A: Yes! The configuration is global and works with any Claude Code project.
-
-**Q: How do I switch back to regular Claude?**
-A: Simply modify the `Router` configuration in `config.js` to use a different provider.
-
-**Q: Is this secure?**
-A: The proxy runs locally on your machine. Anonymous tokens are temporary and auto-refresh.
-
-**Q: Can I use multiple models simultaneously?**
-A: Yes! Configure different models in the Router section for different use cases.
-
-## 🐛 Known Issues
-
-- Claude Code Router must be v1.0.47 or higher for full compatibility
-- Anonymous tokens expire after some time (auto-refreshed by the plugin)
-- Some advanced features may require authenticated mode
-
-## 🎯 Model Comparison
-
-| Model | Context | Best For | Speed | Features |
-|-------|---------|----------|-------|----------|
-| **GLM-4.6** | 200K | Coding, Reasoning, Complex Tasks | Fast | Latest flagship, tool use, advanced reasoning |
-| **GLM-4.5** | 128K | General Purpose | Fast | Balanced performance |
-| **GLM-4.5-Air** | 128K | Quick Tasks, Background | Fastest | Lightweight, efficient |
-| **GLM-4.5V** | 128K | Vision, Images, UI Analysis | Fast | Multimodal, image understanding |
-
-### When to Use Each Model
-
-**GLM-4.6** 🏆
-- Complex coding tasks requiring deep understanding
-- Large codebase analysis (up to 200K tokens)
-- Advanced reasoning and problem-solving
-- Tool use and agentic workflows
-- Real-world coding benchmarks leader
-
-**GLM-4.5-Air** ⚡
-- Quick responses needed
-- Background tasks
-- Code completion
-- Simple queries
-- Resource-constrained scenarios
-
-**GLM-4.5V** 🖼️
-- Analyzing UI screenshots
-- Understanding diagrams and charts
-- Converting designs to code
-- Visual debugging
-- Image-based documentation
-
-## 🎓 Learning Resources
-
-### Understanding the Flow
-
-```
-Claude Code → Claude Code Router → zai.js Plugin → Local Proxy (8080) → Z.AI API
-```
-
-1. **Claude Code**: Sends OpenAI-formatted requests
-2. **Router**: Routes to appropriate provider (GLM)
-3. **Plugin**: Transforms request for Z.AI format
-4. **Proxy**: Handles authentication and forwarding
-5. **Z.AI**: Processes and returns response
-
-### Key Components
-
-- **Transformer Plugin**: Converts between API formats
-- **Router Configuration**: Determines which provider/model to use
-- **Proxy Service**: Handles authentication and token management
+This project is part of the Z.AI2API Python repository.
 
 ---
 
-Happy coding with Claude Code and Z.AI! 🚀
+**🎉 Happy Coding with Z.AI and Claude Code! 🎉**
+

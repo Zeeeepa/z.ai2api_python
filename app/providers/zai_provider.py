@@ -40,27 +40,41 @@ class ZAIProvider(BaseProvider):
         self.base_url = "https://chat.z.ai"
         self.auth_url = f"{self.base_url}/api/v1/auths/"
         
-        # 模型映射
+        # 模型映射 - 更新至最新 GLM 模型
         self.model_mapping = {
+            # GLM-4.5 系列
             settings.PRIMARY_MODEL: "0727-360B-API",  # GLM-4.5
             settings.THINKING_MODEL: "0727-360B-API",  # GLM-4.5-Thinking
             settings.SEARCH_MODEL: "0727-360B-API",  # GLM-4.5-Search
             settings.AIR_MODEL: "0727-106B-API",  # GLM-4.5-Air
-            settings.GLM46_MODEL: "GLM-4-6-API-V1",  # GLM-4.6
+            
+            # GLM-4.6 系列 (200K context window)
+            settings.GLM46_MODEL: "GLM-4-6-API-V1",  # GLM-4.6 (200K)
             settings.GLM46_THINKING_MODEL: "GLM-4-6-API-V1",  # GLM-4.6-Thinking
             settings.GLM46_SEARCH_MODEL: "GLM-4-6-API-V1",  # GLM-4.6-Search
+            
+            # GLM-4.5V 视觉模型 (Vision/Multimodal)
+            "GLM-4.5V": "1029-201B-API",  # GLM-4.5V 视觉模型
+            "glm-4.5v": "1029-201B-API",  # GLM-4.5V (小写别名)
+            "GLM-4-5V": "1029-201B-API",  # GLM-4.5V (格式变体)
         }
     
     def get_supported_models(self) -> List[str]:
         """获取支持的模型列表"""
         return [
+            # GLM-4.5 系列
             settings.PRIMARY_MODEL,
             settings.THINKING_MODEL,
             settings.SEARCH_MODEL,
             settings.AIR_MODEL,
+            # GLM-4.6 系列 (200K context)
             settings.GLM46_MODEL,
             settings.GLM46_THINKING_MODEL,
             settings.GLM46_SEARCH_MODEL,
+            # GLM-4.5V 视觉模型
+            "GLM-4.5V",
+            "glm-4.5v",
+            "GLM-4-5V",
         ]
     
     async def get_token(self) -> str:
