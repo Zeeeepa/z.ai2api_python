@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  qwen-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.qwen
+    container_name: qwen-api-server
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - QWEN_EMAIL=${QWEN_EMAIL}
+      - QWEN_PASSWORD=${QWEN_PASSWORD}
+      - DEBUG=${DEBUG:-false}
+      - ENABLE_FLAREPROX=${ENABLE_FLAREPROX:-false}
+      - CLOUDFLARE_API_KEY=${CLOUDFLARE_API_KEY:-}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+    env_file:
+      - .env.qwen
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - qwen-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  qwen-network:
+    driver: bridge
+
