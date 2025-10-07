@@ -32,15 +32,18 @@
 
 ```bash
 # 克隆项目
+curl -LsSf https://astral.sh/uv/install.sh | sh
+sudo apt update
+sudo apt install python3-pip
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+source $HOME/.local/bin/env
 git clone https://github.com/ZyphrZero/z.ai2api_python.git
 cd z.ai2api_python
 
-# 使用 uv (推荐)
-curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 uv run python main.py
 
-# 或使用 pip (推荐使用清华源)
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 python main.py
 ```
