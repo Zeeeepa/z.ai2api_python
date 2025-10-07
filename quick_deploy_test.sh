@@ -155,9 +155,53 @@ check_prerequisites() {
             
             # Check if python3-venv is installed
             if ! $PYTHON_CMD -m venv --help &> /dev/null; then
-                print_error "python3-venv is not installed!"
-                print_info "Install it with: sudo apt install python3-venv python3-full"
-                exit 1
+                print_warning "python3-venv is not installed"
+                print_step "Attempting to install python3-venv..."
+                
+                # Try to auto-install on Debian/Ubuntu
+                if command -v apt-get &> /dev/null; then
+                    echo ""
+                    print_info "This script needs to install python3-venv and python3-full"
+                    print_info "Running: sudo apt install -y python3-venv python3-full"
+                    echo ""
+                    
+                    if sudo apt install -y python3-venv python3-full; then
+                        print_success "python3-venv installed successfully"
+                    else
+                        print_error "Failed to install python3-venv"
+                        print_info "Please run manually: sudo apt install python3-venv python3-full"
+                        exit 1
+                    fi
+                elif command -v yum &> /dev/null; then
+                    print_info "Running: sudo yum install -y python3"
+                    if sudo yum install -y python3; then
+                        print_success "python3 installed successfully"
+                    else
+                        print_error "Failed to install python3"
+                        exit 1
+                    fi
+                elif command -v dnf &> /dev/null; then
+                    print_info "Running: sudo dnf install -y python3"
+                    if sudo dnf install -y python3; then
+                        print_success "python3 installed successfully"
+                    else
+                        print_error "Failed to install python3"
+                        exit 1
+                    fi
+                else
+                    print_error "Could not auto-install python3-venv"
+                    print_info "Please install manually:"
+                    print_info "  Ubuntu/Debian: sudo apt install python3-venv python3-full"
+                    print_info "  CentOS/RHEL: sudo yum install python3"
+                    print_info "  Fedora: sudo dnf install python3"
+                    exit 1
+                fi
+                
+                # Verify installation
+                if ! $PYTHON_CMD -m venv --help &> /dev/null; then
+                    print_error "python3-venv still not available after installation"
+                    exit 1
+                fi
             fi
             
             # Create virtual environment
