@@ -165,7 +165,12 @@ module.exports = ZAITransformer;'''
                 "name": "GLM",
                 "api_base_url": f"http://{host}:{port}/v1/chat/completions",
                 "api_key": api_key,
-                "models": ["GLM-4.5", "GLM-4.5-Air"],
+                "models": [
+                    "GLM-4.6",        # Latest flagship model with 200K context
+                    "GLM-4.5",        # Previous flagship model
+                    "GLM-4.5-Air",    # Lightweight variant
+                    "GLM-4.5V"        # Vision/multimodal model
+                ],
                 "transformers": {
                     "use": ["zai"]
                 }
@@ -177,13 +182,13 @@ module.exports = ZAITransformer;'''
                 "powerline": {"modules": []}
             },
             "Router": {
-                "default": "GLM,GLM-4.5",
-                "background": "GLM,GLM-4.5",
-                "think": "GLM,GLM-4.5",
-                "longContext": "GLM,GLM-4.5",
-                "longContextThreshold": 60000,
-                "webSearch": "GLM,GLM-4.5",
-                "image": "GLM,GLM-4.5"
+                "default": "GLM,GLM-4.6",              # Use latest GLM-4.6 by default
+                "background": "GLM,GLM-4.5-Air",       # Use Air for background tasks
+                "think": "GLM,GLM-4.6",                # Use GLM-4.6 for reasoning
+                "longContext": "GLM,GLM-4.6",          # GLM-4.6 has 200K context window
+                "longContextThreshold": 100000,        # Increased for GLM-4.6's capability
+                "webSearch": "GLM,GLM-4.6",            # Use GLM-4.6 for search tasks
+                "image": "GLM,GLM-4.5V"                # Use GLM-4.5V for vision tasks
             },
             "CUSTOM_ROUTER_PATH": ""
         }
@@ -318,4 +323,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -76,7 +76,7 @@ Once Claude Code starts, ask it:
 What model are you?
 ```
 
-Expected response should mention **GLM-4.5** or similar Z.AI models.
+Expected response should mention **GLM-4.6** (the latest model with 200K context) or similar Z.AI models.
 
 ## 📁 Generated Files
 
@@ -110,17 +110,17 @@ Transformer plugin that:
     "name": "GLM",
     "api_base_url": "http://127.0.0.1:8080/v1/chat/completions",
     "api_key": "sk-your-api-key",
-    "models": ["GLM-4.5", "GLM-4.5-Air"],
+    "models": ["GLM-4.6", "GLM-4.5", "GLM-4.5-Air", "GLM-4.5V"],
     "transformers": {
       "use": ["zai"]
     }
   }],
   "Router": {
-    "default": "GLM,GLM-4.5",
-    "background": "GLM,GLM-4.5",
-    "think": "GLM,GLM-4.5",
-    "longContext": "GLM,GLM-4.5",
-    "image": "GLM,GLM-4.5"
+    "default": "GLM,GLM-4.6",         // Latest model with 200K context
+    "background": "GLM,GLM-4.5-Air",  // Lightweight for background tasks
+    "think": "GLM,GLM-4.6",           // Best for reasoning
+    "longContext": "GLM,GLM-4.6",     // 200K context window
+    "image": "GLM,GLM-4.5V"           // Vision/multimodal tasks
   }
 }
 ```
@@ -221,9 +221,10 @@ python zai_cc.py
 - ✅ Image understanding (GLM-4.5V)
 
 ### Z.AI Models Available
-- **GLM-4.5**: Latest general-purpose model
-- **GLM-4.5-Air**: Faster, lightweight variant
-- **GLM-4.5V**: Multimodal (vision) support
+- **GLM-4.6**: 🚀 **Latest flagship model** - 200K context window, superior coding performance, advanced reasoning
+- **GLM-4.5**: Previous flagship general-purpose model with 128K context
+- **GLM-4.5-Air**: Faster, lightweight variant for quick tasks
+- **GLM-4.5V**: 🖼️ **Multimodal vision model** - Image understanding and visual reasoning
 
 ## 📚 Advanced Usage
 
@@ -300,7 +301,12 @@ MIT License - See LICENSE file for details
 1. **First Run**: The first API call may take a few seconds as it fetches the anonymous token
 2. **Token Caching**: Tokens are cached for better performance
 3. **Rate Limits**: Be mindful of Z.AI rate limits when using anonymous mode
-4. **Model Selection**: Use `GLM-4.5` for best results, `GLM-4.5-Air` for faster responses
+4. **Model Selection**: 
+   - Use `GLM-4.6` for best coding/reasoning performance (200K context)
+   - Use `GLM-4.5-Air` for faster, lightweight responses
+   - Use `GLM-4.5V` for any vision/image-related tasks
+5. **Long Context**: GLM-4.6 supports up to 200K tokens - perfect for large codebases
+6. **Vision Tasks**: GLM-4.5V can analyze screenshots, diagrams, and images
 
 ## ❓ FAQ
 
@@ -325,6 +331,38 @@ A: Yes! Configure different models in the Router section for different use cases
 - Anonymous tokens expire after some time (auto-refreshed by the plugin)
 - Some advanced features may require authenticated mode
 
+## 🎯 Model Comparison
+
+| Model | Context | Best For | Speed | Features |
+|-------|---------|----------|-------|----------|
+| **GLM-4.6** | 200K | Coding, Reasoning, Complex Tasks | Fast | Latest flagship, tool use, advanced reasoning |
+| **GLM-4.5** | 128K | General Purpose | Fast | Balanced performance |
+| **GLM-4.5-Air** | 128K | Quick Tasks, Background | Fastest | Lightweight, efficient |
+| **GLM-4.5V** | 128K | Vision, Images, UI Analysis | Fast | Multimodal, image understanding |
+
+### When to Use Each Model
+
+**GLM-4.6** 🏆
+- Complex coding tasks requiring deep understanding
+- Large codebase analysis (up to 200K tokens)
+- Advanced reasoning and problem-solving
+- Tool use and agentic workflows
+- Real-world coding benchmarks leader
+
+**GLM-4.5-Air** ⚡
+- Quick responses needed
+- Background tasks
+- Code completion
+- Simple queries
+- Resource-constrained scenarios
+
+**GLM-4.5V** 🖼️
+- Analyzing UI screenshots
+- Understanding diagrams and charts
+- Converting designs to code
+- Visual debugging
+- Image-based documentation
+
 ## 🎓 Learning Resources
 
 ### Understanding the Flow
@@ -348,4 +386,3 @@ Claude Code → Claude Code Router → zai.js Plugin → Local Proxy (8080) → 
 ---
 
 Happy coding with Claude Code and Z.AI! 🚀
-
