@@ -41,11 +41,12 @@ source $HOME/.local/bin/env
 git clone https://github.com/ZyphrZero/z.ai2api_python.git
 cd z.ai2api_python
 
-uv sync
-uv run python main.py
 
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 python main.py
+
+uv sync
+uv run python main.py
 ```
 
 > 🍋‍🟩 服务启动后访问接口文档：http://localhost:8080/docs  
