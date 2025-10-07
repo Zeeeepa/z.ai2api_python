@@ -202,24 +202,131 @@ module.exports = ZAITransformer;'''
         try:
             result = subprocess.run(["node", "--version"], capture_output=True, text=True)
             if result.returncode == 0:
-                print(f"✅ Node.js installed: {result.stdout.strip()}")
+                version = result.stdout.strip()
+                print(f"✅ Node.js installed: {version}")
                 return True
         except FileNotFoundError:
             pass
-        print("❌ Node.js not found. Please install Node.js first.")
+        print("❌ Node.js not found.")
         return False
+    
+    def install_nodejs_lts(self):
+        """Install Node.js LTS using system package manager"""
+        print("\n📦 Installing Node.js LTS...")
         
-    def check_claude_code(self):
-        """Check if Claude Code is installed"""
+        system = platform.system().lower()
+        
         try:
-            result = subprocess.run(["claude-code", "--version"], capture_output=True, text=True)
-            if result.returncode == 0:
-                print(f"✅ Claude Code installed: {result.stdout.strip()}")
-                return True
-        except FileNotFoundError:
-            pass
-        print("⚠️  Claude Code not found. Install with: npm install -g claude-code")
-        return False
+            if system == "linux":
+                # Detect distribution
+                try:
+                    with open("/etc/os-release") as f:
+                        os_info = f.read().lower()
+                    
+                    if "ubuntu" in os_info or "debian" in os_info:
+                        print("Detected: Ubuntu/Debian")
+                        print("Installing Node.js LTS via NodeSource repository...")
+                        subprocess.run(["curl", "-fsSL", "https://deb.nodesource.com/setup_lts.x", "-o", "/tmp/nodesource_setup.sh"], check=True)
+                        subprocess.run(["sudo", "bash", "/tmp/nodesource_setup.sh"], check=True)
+                        subprocess.run(["sudo", "apt-get", "install", "-y", "nodejs"], check=True)
+                    elif "fedora" in os_info or "rhel" in os_info or "centos" in os_info:
+                        print("Detected: Fedora/RHEL/CentOS")
+                        subprocess.run(["sudo", "dnf", "install", "-y", "nodejs"], check=True)
+                    else:
+                        print("⚠️  Unknown Linux distribution. Please install Node.js manually.")
+                        return False
+                except Exception as e:
+                    print(f"⚠️  Could not detect distribution: {e}")
+                    return False
+                    
+            elif system == "darwin":
+                print("Detected: macOS")
+                # Check if Homebrew is installed
+                try:
+                    subprocess.run(["brew", "--version"], capture_output=True, check=True)
+                    print("Installing Node.js via Homebrew...")
+                    subprocess.run(["brew", "install", "node"], check=True)
+                except:
+                    print("⚠️  Homebrew not found. Please install from https://brew.sh")
+                    return False
+                    
+            else:
+                print(f"⚠️  Unsupported system: {system}")
+                print("Please install Node.js LTS manually from: https://nodejs.org/")
+                return False
+            
+            print("✅ Node.js LTS installed successfully!")
+            return True
+            
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to install Node.js: {e}")
+            return False
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
+            return False
+    
+    def install_npm_packages(self):
+        """Install required npm packages globally"""
+        print("\n📦 Installing npm packages...")
+        
+        packages = [
+            ("claude-code-router", "Claude Code Router"),
+            ("claude-code", "Claude Code")
+        ]
+        
+        for package, name in packages:
+            try:
+                print(f"Installing {name}...")
+                result = subprocess.run(
+                    ["npm", "install", "-g", package],
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+                if result.returncode == 0:
+                    print(f"✅ {name} installed successfully")
+                else:
+                    print(f"⚠️  {name} installation had warnings (may still work)")
+                    print(f"   Error: {result.stderr[:200]}")
+            except subprocess.TimeoutExpired:
+                print(f"⚠️  {name} installation timed out")
+            except Exception as e:
+                print(f"❌ Failed to install {name}: {e}")
+                
+        return True
+    
+    def verify_installations(self):
+        """Verify all required tools are installed"""
+        print("\n🔍 Verifying installations...")
+        
+        checks = [
+            ("node", "Node.js"),
+            ("npm", "npm"),
+            ("ccr", "Claude Code Router"),
+            ("claude-code", "Claude Code")
+        ]
+        
+        all_ok = True
+        for cmd, name in checks:
+            try:
+                result = subprocess.run(
+                    [cmd, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    version = result.stdout.strip().split('\n')[0]
+                    print(f"✅ {name}: {version}")
+                else:
+                    print(f"⚠️  {name}: installed but version check failed")
+            except FileNotFoundError:
+                print(f"❌ {name}: not found")
+                all_ok = False
+            except Exception as e:
+                print(f"⚠️  {name}: {e}")
+                
+        return all_ok
         
     def start_api_server(self):
         """Start the Z.AI API server"""
@@ -285,11 +392,34 @@ module.exports = ZAITransformer;'''
         print("🎯 Z.AI Claude Code Setup")
         print("=" * 60 + "\n")
         
-        # Check prerequisites
+        # Step 1: Check and install Node.js if needed
+        print("Step 1: Checking Node.js...")
         if not self.check_nodejs():
-            sys.exit(1)
-            
-        # Create directories and files
+            print("\n📥 Node.js not found. Installing Node.js LTS...")
+            user_input = input("Install Node.js LTS? (y/n): ").lower()
+            if user_input == 'y':
+                if not self.install_nodejs_lts():
+                    print("\n❌ Failed to install Node.js. Please install manually:")
+                    print("   https://nodejs.org/")
+                    sys.exit(1)
+                # Verify installation
+                if not self.check_nodejs():
+                    print("❌ Node.js installation verification failed")
+                    sys.exit(1)
+            else:
+                print("❌ Node.js is required. Exiting...")
+                sys.exit(1)
+        
+        # Step 2: Install npm packages
+        print("\nStep 2: Installing npm packages...")
+        self.install_npm_packages()
+        
+        # Step 3: Verify all installations
+        print("\nStep 3: Verifying installations...")
+        self.verify_installations()
+        
+        # Step 4: Create directories and files
+        print("\nStep 4: Creating configuration files...")
         self.create_directories()
         self.create_plugin()
         
@@ -297,24 +427,33 @@ module.exports = ZAITransformer;'''
         api_key = os.getenv("AUTH_TOKEN", "sk-your-api-key")
         self.create_config(api_key=api_key)
         
-        print("\n✅ Setup complete!")
+        print("\n" + "=" * 60)
+        print("✅ Setup Complete!")
+        print("=" * 60)
         print(f"\n📋 Configuration files:")
         print(f"   • Plugin: {self.plugin_file}")
         print(f"   • Config: {self.config_file}")
         
-        # Check Claude Code
-        if not self.check_claude_code():
-            print("\n💡 Install Claude Code with: npm install -g claude-code")
-            sys.exit(0)
-            
-        # Start API server
-        if self.start_api_server():
-            # Run Claude Code
-            print("\n" + "=" * 60)
-            input("Press Enter to start Claude Code...")
-            self.run_claude_code()
-        else:
-            print("\n❌ Please start the API server manually: python main.py")
+        print("\n📦 Installed packages:")
+        print("   • Node.js LTS")
+        print("   • npm (Node Package Manager)")
+        print("   • claude-code-router (ccr command)")
+        print("   • claude-code")
+        
+        print("\n🚀 Usage:")
+        print("   1. Start the API server (optional):")
+        print("      python main.py")
+        print("\n   2. Use Claude Code Router:")
+        print("      ccr \"fix code\"")
+        print("      ccr \"analyze this file\"")
+        print("      ccr \"what model are you?\"")
+        
+        print("\n💡 Models configured:")
+        print("   • GLM-4.6 (default) - 200K context, best for coding")
+        print("   • GLM-4.5V - Vision tasks, UI analysis")
+        print("   • GLM-4.5-Air - Fast, lightweight tasks")
+        
+        print("\n" + "=" * 60)
 
 def main():
     """Main entry point"""
