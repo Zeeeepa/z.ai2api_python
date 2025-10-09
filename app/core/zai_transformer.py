@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.utils.logger import get_logger
 from app.utils.token_pool import get_token_pool, initialize_token_pool
 from app.utils.user_agent import get_random_user_agent
+from app.utils.signature import add_signature_to_headers
 
 logger = get_logger()
 
@@ -62,7 +63,7 @@ def get_zai_dynamic_headers(chat_id: str = "") -> Dict[str, str]:
         "Accept": "application/json, text/event-stream",
         "User-Agent": user_agent,
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "X-FE-Version": "prod-fe-1.0.79",
+        "X-FE-Version": "prod-fe-1.0.85",  # Updated version
         "Origin": "https://chat.z.ai",
     }
 
@@ -75,6 +76,8 @@ def get_zai_dynamic_headers(chat_id: str = "") -> Dict[str, str]:
     # 根据 chat_id 设置 Referer
     if chat_id:
         headers["Referer"] = f"https://chat.z.ai/c/{chat_id}"
+        # Add signature headers for Z.AI API authentication
+        headers = add_signature_to_headers(headers, chat_id)
     else:
         headers["Referer"] = "https://chat.z.ai/"
 
