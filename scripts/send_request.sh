@@ -17,6 +17,11 @@ if [ -f ".env" ]; then
     export $(grep -v '^#' .env | xargs)
 fi
 
+# Handle different port variable names
+if [ -n "$LISTEN_PORT" ] && [ -z "$PORT" ]; then
+    PORT=$LISTEN_PORT
+fi
+
 PORT=${PORT:-8080}
 BASE_URL="http://localhost:$PORT"
 
@@ -218,4 +223,3 @@ else
     echo "  3. Server logs for error messages"
     echo ""
 fi
-
