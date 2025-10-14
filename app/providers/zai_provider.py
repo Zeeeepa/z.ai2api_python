@@ -22,6 +22,7 @@ from app.models.schemas import OpenAIRequest, Message
 from app.core.config import settings
 from app.utils.logger import get_logger
 from app.utils.token_pool import get_token_pool
+from app.utils.captcha_solver import get_captcha_solver
 from app.core.zai_transformer import generate_uuid, get_zai_dynamic_headers
 from app.utils.sse_tool_handler import SSEToolHandler
 
@@ -134,6 +135,44 @@ class ZAIProvider(BaseProvider):
                 "email": settings.ZAI_EMAIL,
                 "password": settings.ZAI_PASSWORD
             }
+            
+            # 如果配置了验证码服务，先解决验证码
+            if settings.CAPTCHA_API_KEY and settings.CAPTCHA_SITE_KEY:
+                self.logger.info(f"🔐 检测到验证码配置，正在解决验证码...")
+                captcha_solver = get_captcha_solver(
+                    service=settings.CAPTCHA_SERVICE,
+                    api_key=settings.CAPTCHA_API_KEY
+                )
+                
+                # 尝试不同类型的验证码
+                captcha_response = None
+                
+                # 1. 尝试 reCAPTCHA v2
+                captcha_response = await captcha_solver.solve_recaptcha_v2(
+                    site_key=settings.CAPTCHA_SITE_KEY,
+                    page_url="https://chat.z.ai/"
+                )
+                
+                # 2. 如果失败，尝试 hCaptcha
+                if not captcha_response:
+                    captcha_response = await captcha_solver.solve_hcaptcha(
+                        site_key=settings.CAPTCHA_SITE_KEY,
+                        page_url="https://chat.z.ai/"
+                    )
+                
+                # 3. 如果还失败，尝试 Cloudflare Turnstile
+                if not captcha_response:
+                    captcha_response = await captcha_solver.solve_cloudflare_turnstile(
+                        site_key=settings.CAPTCHA_SITE_KEY,
+                        page_url="https://chat.z.ai/"
+                    )
+                
+                if captcha_response:
+                    # 将验证码响应添加到登录数据中
+                    login_data["captcha"] = captcha_response
+                    self.logger.info(f"✅ 验证码解决成功")
+                else:
+                    self.logger.warning(f"⚠️ 验证码解决失败，尝试不带验证码登录...")
             
             self.logger.info(f"🔐 正在使用邮箱登录 Z.AI: {settings.ZAI_EMAIL}")
             
