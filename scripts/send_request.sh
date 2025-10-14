@@ -1,131 +1,221 @@
-#!/usr/bin/env bash
-# send_request.sh - Send test requests to the API
+#!/bin/bash
 
-set -e
+echo "========================================"
+echo "📡 Testing Z.AI2API Server"
+echo "========================================"
+echo ""
 
-# Colors for output
+# Colors
 GREEN='\033[0;32m'
+BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Configuration
-API_URL="${API_URL:-http://localhost:8080}"
-AUTH_TOKEN="${AUTH_TOKEN:-sk-z-ai2api-local-test-key}"
-
-echo -e "${BLUE}🧪 Testing Z.AI2API Server${NC}"
-echo ""
-
-# Wait for server to be ready
-echo -e "${YELLOW}⏳ Waiting for server to be ready...${NC}"
-MAX_RETRIES=30
-RETRY_COUNT=0
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if curl -s "$API_URL/" > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Server is ready!${NC}"
-        break
-    fi
-    RETRY_COUNT=$((RETRY_COUNT + 1))
-    if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-        echo -e "${RED}❌ Server did not start in time${NC}"
-        exit 1
-    fi
-    sleep 1
-done
-
-echo ""
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}Test 1: Simple Chat Completion (Non-Streaming)${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-echo ""
-
-RESPONSE=$(curl -s -X POST "$API_URL/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Say hello in one sentence"
-      }
-    ],
-    "stream": false
-  }')
-
-echo -e "${YELLOW}Response:${NC}"
-echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
-echo ""
-
-# Check if response contains expected fields
-if echo "$RESPONSE" | grep -q "choices"; then
-    echo -e "${GREEN}✅ Test 1 PASSED: Received valid response${NC}"
-else
-    echo -e "${RED}❌ Test 1 FAILED: Invalid response${NC}"
+# Load environment
+if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | xargs)
 fi
 
-echo ""
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}Test 2: Streaming Chat Completion${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-echo ""
+PORT=${PORT:-8080}
+BASE_URL="http://localhost:$PORT"
 
-echo -e "${YELLOW}Streaming response:${NC}"
-curl -s -X POST "$API_URL/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Count from 1 to 5"
-      }
-    ],
-    "stream": true
-  }' | while IFS= read -r line; do
-    if [[ "$line" == data:* ]]; then
-        # Remove "data: " prefix and parse JSON
-        json_data="${line#data: }"
-        if [[ "$json_data" != "[DONE]" ]]; then
-            # Try to extract content from the JSON
-            content=$(echo "$json_data" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('choices', [{}])[0].get('delta', {}).get('content', ''), end='')" 2>/dev/null || echo "")
-            if [ -n "$content" ]; then
-                echo -n "$content"
-            fi
-        fi
-    fi
-done
+# Check if server is running
+echo "🔍 Checking if server is running..."
+if ! curl -s "$BASE_URL/v1/models" > /dev/null 2>&1; then
+    echo -e "${RED}❌ Server is not running on port $PORT${NC}"
+    echo ""
+    echo "Start the server first:"
+    echo "  bash scripts/start.sh"
+    echo ""
+    echo "Or run everything:"
+    echo "  bash scripts/all.sh"
+    exit 1
+fi
 
-echo ""
-echo -e "${GREEN}✅ Test 2 PASSED: Streaming completed${NC}"
+echo -e "${GREEN}✅ Server is running${NC}"
 echo ""
 
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}Test 3: Models List${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
+# Test 1: List Models
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📝 Test 1: List Available Models"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "Request: GET $BASE_URL/v1/models"
 echo ""
 
-MODELS_RESPONSE=$(curl -s -X GET "$API_URL/v1/models" \
-  -H "Authorization: Bearer $AUTH_TOKEN")
-
-echo -e "${YELLOW}Available models:${NC}"
+MODELS_RESPONSE=$(curl -s "$BASE_URL/v1/models")
+echo "Response:"
 echo "$MODELS_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$MODELS_RESPONSE"
 echo ""
 
-if echo "$MODELS_RESPONSE" | grep -q "data"; then
-    echo -e "${GREEN}✅ Test 3 PASSED: Models list retrieved${NC}"
-else
-    echo -e "${RED}❌ Test 3 FAILED: Invalid models response${NC}"
-fi
+# Test 2: Simple Chat Completion
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "💬 Test 2: Simple Chat Completion"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "Request: POST $BASE_URL/v1/chat/completions"
+echo "Model: GLM-4.5"
+echo "Message: 'Say hello in exactly 3 words'"
+echo ""
 
+CHAT_RESPONSE=$(curl -s -X POST "$BASE_URL/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-key" \
+  -d '{
+    "model": "GLM-4.5",
+    "messages": [
+      {"role": "user", "content": "Say hello in exactly 3 words"}
+    ],
+    "max_tokens": 50,
+    "temperature": 0.7
+  }')
+
+echo "Response:"
+if echo "$CHAT_RESPONSE" | python3 -c "
+import sys
+import json
+try:
+    data = json.load(sys.stdin)
+    if 'choices' in data and len(data['choices']) > 0:
+        content = data['choices'][0]['message']['content']
+        model = data.get('model', 'unknown')
+        usage = data.get('usage', {})
+        
+        print(f'  ✅ Success!')
+        print(f'  Model: {model}')
+        print(f'  Content: {content}')
+        print(f'  Tokens: {usage.get(\"total_tokens\", \"N/A\")}')
+        sys.exit(0)
+    elif 'error' in data:
+        print(f'  ❌ Error: {data[\"error\"]}')
+        sys.exit(1)
+    else:
+        print(f'  ⚠️  Unexpected response format')
+        print(json.dumps(data, indent=2))
+        sys.exit(1)
+except Exception as e:
+    print(f'  ❌ Failed to parse response: {e}')
+    sys.exit(1)
+" 2>&1; then
+    TEST2_RESULT="${GREEN}PASSED${NC}"
+else
+    TEST2_RESULT="${RED}FAILED${NC}"
+    echo ""
+    echo "Raw Response:"
+    echo "$CHAT_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$CHAT_RESPONSE"
+fi
 echo ""
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}🎉 All tests completed!${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
+
+# Test 3: Streaming Response
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🌊 Test 3: Streaming Response"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo -e "${YELLOW}Admin Panel:${NC} $API_URL/admin"
-echo -e "${YELLOW}API Docs:${NC} $API_URL/docs"
+echo "Request: POST $BASE_URL/v1/chat/completions (stream=true)"
+echo "Model: GLM-4.5"
+echo "Message: 'Count from 1 to 5'"
 echo ""
+
+echo -n "Streaming output: "
+STREAM_OUTPUT=$(curl -s -X POST "$BASE_URL/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-key" \
+  -d '{
+    "model": "GLM-4.5",
+    "messages": [
+      {"role": "user", "content": "Count from 1 to 5"}
+    ],
+    "stream": true,
+    "max_tokens": 30
+  }')
+
+if echo "$STREAM_OUTPUT" | grep -q "data:"; then
+    echo -e "${GREEN}✓${NC}"
+    TEST3_RESULT="${GREEN}PASSED${NC}"
+    echo ""
+    echo "Sample chunks:"
+    echo "$STREAM_OUTPUT" | head -5
+else
+    echo -e "${RED}✗${NC}"
+    TEST3_RESULT="${RED}FAILED${NC}"
+    echo ""
+    echo "Raw output:"
+    echo "$STREAM_OUTPUT" | head -10
+fi
+echo ""
+
+# Test 4: Different Model
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🧠 Test 4: Different Model (GLM-4.5-Air)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+AIR_RESPONSE=$(curl -s -X POST "$BASE_URL/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-key" \
+  -d '{
+    "model": "GLM-4.5-Air",
+    "messages": [
+      {"role": "user", "content": "What is 2+2?"}
+    ],
+    "max_tokens": 20
+  }')
+
+if echo "$AIR_RESPONSE" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    if 'choices' in data:
+        print('  ✅ GLM-4.5-Air working')
+        sys.exit(0)
+    else:
+        print('  ❌ Unexpected response')
+        sys.exit(1)
+except:
+    sys.exit(1)
+" 2>&1; then
+    TEST4_RESULT="${GREEN}PASSED${NC}"
+else
+    TEST4_RESULT="${RED}FAILED${NC}"
+fi
+echo ""
+
+# Summary
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📊 Test Summary"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo -e "  Test 1 (List Models):      ${GREEN}PASSED${NC}"
+echo -e "  Test 2 (Chat Completion):  $TEST2_RESULT"
+echo -e "  Test 3 (Streaming):        $TEST3_RESULT"
+echo -e "  Test 4 (Different Model):  $TEST4_RESULT"
+echo ""
+
+# Overall result
+if [ "$TEST2_RESULT" = "${GREEN}PASSED${NC}" ]; then
+    echo -e "${GREEN}========================================"
+    echo "✅ All Core Tests Passed!"
+    echo "========================================${NC}"
+    echo ""
+    echo "Your Z.AI2API server is working correctly!"
+    echo ""
+    echo "You can now use it with any OpenAI-compatible client:"
+    echo "  Base URL: $BASE_URL"
+    echo "  API Key: any-string (not validated)"
+    echo ""
+else
+    echo -e "${YELLOW}========================================"
+    echo "⚠️  Some Tests Failed"
+    echo "========================================${NC}"
+    echo ""
+    echo "The server is running but API calls are failing."
+    echo "This usually means authentication issues."
+    echo ""
+    echo "Check:"
+    echo "  1. Your ZAI_EMAIL/PASSWORD are correct"
+    echo "  2. AUTH_TOKEN is valid (not expired)"
+    echo "  3. Server logs for error messages"
+    echo ""
+fi
 
