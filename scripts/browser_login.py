@@ -64,67 +64,47 @@ async def browser_login() -> str:
         page = await context.new_page()
         
         try:
-            # Step 1: Navigate with multiple strategies
-            logger.info("🔗 Navigating to https://chat.z.ai...")
+            # Step 1: Navigate directly to auth page
+            logger.info("🔗 Navigating directly to https://chat.z.ai/auth...")
             
             try:
-                # Try fast load first
-                await page.goto('https://chat.z.ai/', wait_until='domcontentloaded', timeout=15000)
+                await page.goto('https://chat.z.ai/auth', wait_until='domcontentloaded', timeout=15000)
             except Exception as e:
-                logger.warning(f"Fast load failed: {e}, trying slow load...")
-                await page.goto('https://chat.z.ai/', wait_until='load', timeout=30000)
+                logger.warning(f"Direct auth page load failed: {e}, trying via homepage...")
+                await page.goto('https://chat.z.ai/', wait_until='domcontentloaded', timeout=15000)
+                
+                # Click sign-in to get to auth page
+                try:
+                    await page.click('text=Sign in', timeout=5000)
+                    await page.wait_for_url('**/auth', timeout=10000)
+                except Exception:
+                    logger.warning("⚠️ Couldn't click sign-in, assuming on login page")
             
-            # Wait for any initial animations/loading
-            await page.wait_for_timeout(2000)
+            # Wait for auth page to fully load
+            await page.wait_for_timeout(3000)
             
             # Take screenshot
-            await page.screenshot(path='/tmp/zai_step1_homepage.png')
-            logger.info("📸 Homepage screenshot: /tmp/zai_step1_homepage.png")
+            await page.screenshot(path='/tmp/zai_step1_auth_page.png')
+            logger.info("📸 Auth page screenshot: /tmp/zai_step1_auth_page.png")
             
-            # Step 2: Find and click sign-in button
-            logger.info("🔍 Looking for sign-in button...")
+            # Step 2: Click "Continue with Email" button
+            logger.info("📧 Looking for 'Continue with Email' button...")
             
-            signin_clicked = False
-            signin_selectors = [
-                'text=Sign in',
-                'text=Sign In', 
-                'text=LOGIN',
-                'text=Login',
-                'button:has-text("Sign")',
-                'a:has-text("Sign")',
-                '[data-testid*="signin"]',
-                '[class*="signin"]',
-                '[id*="signin"]',
-            ]
-            
-            for selector in signin_selectors:
-                try:
-                    element = await page.wait_for_selector(selector, timeout=3000, state='visible')
-                    if element:
-                        logger.info(f"✅ Found: {selector}")
-                        await element.click()
-                        signin_clicked = True
-                        break
-                except Exception:
-                    continue
-            
-            if not signin_clicked:
-                logger.warning("⚠️ No sign-in button found, assuming already on login page")
-            else:
-                # Wait for navigation after sign-in click
-                logger.info("⏳ Waiting for login form to load...")
-                await page.wait_for_timeout(3000)
-                
-                # Wait for page to be fully loaded
-                try:
-                    await page.wait_for_load_state('networkidle', timeout=10000)
-                except Exception:
-                    logger.warning("⚠️ Network not idle, continuing anyway...")
-                
-                await page.screenshot(path='/tmp/zai_step2_signin_clicked.png')
+            try:
+                # Find button with "Email" text
+                email_button = await page.wait_for_selector('button:has-text("Email")', timeout=5000)
+                if email_button:
+                    logger.info("✅ Found 'Continue with Email' button")
+                    await email_button.click()
+                    logger.info("🖱️  Clicked 'Continue with Email'")
+                    await page.wait_for_timeout(2000)
+                    await page.screenshot(path='/tmp/zai_step2_email_clicked.png')
+                    logger.info("📸 After email button click: /tmp/zai_step2_email_clicked.png")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not click 'Continue with Email': {e}")
             
             # Step 3: Fill email field
-            logger.info("📧 Looking for email input...")
+            logger.info("📧 Looking for email input field...")
             
             # Give extra time for form to render
             await page.wait_for_timeout(2000)
