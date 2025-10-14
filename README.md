@@ -19,16 +19,58 @@
 
 ## 🚀 快速开始
 
-### 环境要求
+### 方法 1: 自动化脚本（推荐） ⚡
 
-- Python 3.9-3.12
-- pip 或 uv (推荐)
-
-### 本地运行
+**一键完成所有设置、启动并测试服务器：**
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/ZyphrZero/z.ai2api_python.git
+git clone https://github.com/Zeeeepa/z.ai2api_python.git
+cd z.ai2api_python
+
+# 2. 设置环境变量
+export QWEN_EMAIL=your-email@example.com
+export QWEN_PASSWORD=your-password
+
+# 3. 运行自动化脚本
+bash scripts/all.sh
+```
+
+这将自动完成：
+- ✅ 安装所有依赖（Python + Playwright）
+- ✅ 通过 Playwright 自动登录并获取认证令牌
+- ✅ 在 8080 端口启动服务器
+- ✅ 发送测试请求验证 API 功能
+- ✅ 显示实时日志
+
+**单独运行脚本：**
+
+```bash
+# 仅环境设置和令牌获取
+bash scripts/setup.sh
+
+# 仅启动服务器
+bash scripts/start.sh
+
+# 仅测试 API
+bash scripts/send_openai_request.sh
+```
+
+📖 详细文档请参阅 [scripts/README.md](scripts/README.md)
+
+---
+
+### 方法 2: 手动安装
+
+**环境要求：**
+- Python 3.9-3.12
+- pip 或 uv (推荐)
+
+**步骤：**
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/Zeeeepa/z.ai2api_python.git
 cd z.ai2api_python
 
 # 2. 安装依赖（使用 uv 推荐）
