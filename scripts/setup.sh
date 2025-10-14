@@ -65,22 +65,77 @@ log_success "Environment variables found"
 cd "$PROJECT_ROOT"
 log_info "Working directory: $PROJECT_ROOT"
 
-# Step 1: Check Python version
-log_info "Checking Python version..."
-if ! command -v python3 &> /dev/null; then
-    log_error "Python 3 is not installed"
+# Step 1: Find suitable Python version (3.9-3.12)
+log_info "Finding suitable Python version (3.9-3.12)..."
+
+SUITABLE_PYTHON=""
+SUITABLE_VERSION=""
+
+# Try different Python versions in order of preference (avoid 3.13 due to pydantic issues)
+for py_cmd in python3.11 python3.12 python3.10 python3.9 python3; do
+    if command -v $py_cmd &> /dev/null; then
+        version=$($py_cmd --version 2>&1 | cut -d' ' -f2)
+        major=$(echo $version | cut -d'.' -f1)
+        minor=$(echo $version | cut -d'.' -f2)
+        
+        # Check if version is 3.9-3.12 (exclude 3.13+)
+        if [ "$major" -eq 3 ] && [ "$minor" -ge 9 ] && [ "$minor" -le 12 ]; then
+            SUITABLE_PYTHON=$py_cmd
+            SUITABLE_VERSION=$version
+            break
+        fi
+    fi
+done
+
+if [ -z "$SUITABLE_PYTHON" ]; then
+    log_error "No suitable Python version found!"
+    echo ""
+    echo "Python 3.9-3.12 is required (Python 3.13+ has compatibility issues)"
+    echo ""
+    echo "Please install one of these Python versions:"
+    echo "  - Python 3.11 (recommended)"
+    echo "  - Python 3.12"
+    echo "  - Python 3.10"
+    echo "  - Python 3.9"
     exit 1
 fi
 
-PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
-PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f2)
+log_success "Found suitable Python: $SUITABLE_PYTHON ($SUITABLE_VERSION)"
 
-if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 9 ]); then
-    log_error "Python 3.9+ is required (found: $PYTHON_VERSION)"
+# Step 1b: Create virtual environment if it doesn't exist
+VENV_DIR="$PROJECT_ROOT/.venv"
+if [ ! -d "$VENV_DIR" ]; then
+    log_info "Creating virtual environment with $SUITABLE_PYTHON..."
+    
+    if command -v uv &> /dev/null; then
+        # Use uv to create venv (faster)
+        uv venv --python $SUITABLE_PYTHON "$VENV_DIR"
+    else
+        # Use standard Python venv
+        $SUITABLE_PYTHON -m venv "$VENV_DIR"
+    fi
+    
+    if [ $? -eq 0 ]; then
+        log_success "Virtual environment created at $VENV_DIR"
+    else
+        log_error "Failed to create virtual environment"
+        exit 1
+    fi
+else
+    log_success "Virtual environment already exists"
+fi
+
+# Activate virtual environment
+log_info "Activating virtual environment..."
+source "$VENV_DIR/bin/activate"
+
+if [ $? -eq 0 ]; then
+    log_success "Virtual environment activated"
+    log_info "Python: $(which python)"
+else
+    log_error "Failed to activate virtual environment"
     exit 1
 fi
-log_success "Python version: $(python3 --version)"
 
 # Step 2: Install Python dependencies
 log_info "Installing Python dependencies..."
@@ -214,6 +269,11 @@ echo "============================================================"
 echo "                   Setup Complete! ✨"
 echo "============================================================"
 echo ""
+log_success "Virtual environment is active!"
+log_info "To activate in new terminals, run:"
+echo ""
+echo "    source .venv/bin/activate"
+echo ""
 echo "📋 Next steps:"
 echo "  1. Review .env file and adjust settings if needed"
 echo "  2. Run: bash scripts/start.sh"
@@ -222,6 +282,8 @@ echo ""
 echo "🌐 Server will be available at: http://localhost:8080"
 echo "📖 API Documentation: http://localhost:8080/docs"
 echo "🔧 Admin Panel: http://localhost:8080/admin"
+echo ""
+echo "💡 Note: The virtual environment will remain active in this shell"
 echo ""
 echo "============================================================"
 echo ""

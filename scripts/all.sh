@@ -134,12 +134,20 @@ log_step "STEP 1/3: Running setup.sh"
 echo "============================================================"
 echo ""
 
-# Execute setup script
+# Execute setup script (this will create and activate venv)
 bash "$SCRIPT_DIR/setup.sh"
 
 if [ $? -ne 0 ]; then
     log_error "Setup failed"
     exit 1
+fi
+
+# Ensure venv is activated for subsequent steps
+VENV_DIR="$PROJECT_ROOT/.venv"
+if [ -d "$VENV_DIR" ]; then
+    log_info "Activating virtual environment for subsequent steps..."
+    source "$VENV_DIR/bin/activate"
+    log_success "Virtual environment activated"
 fi
 
 echo ""

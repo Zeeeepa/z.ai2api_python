@@ -53,6 +53,21 @@ echo ""
 # Navigate to project root
 cd "$PROJECT_ROOT"
 
+# Step 0: Activate virtual environment if it exists
+VENV_DIR="$PROJECT_ROOT/.venv"
+if [ -d "$VENV_DIR" ]; then
+    log_info "Activating virtual environment..."
+    source "$VENV_DIR/bin/activate"
+    if [ $? -eq 0 ]; then
+        log_success "Virtual environment activated"
+    else
+        log_warning "Failed to activate virtual environment, using system Python"
+    fi
+else
+    log_warning "Virtual environment not found, using system Python"
+    log_info "Run 'bash scripts/setup.sh' to create one"
+fi
+
 # Step 1: Check if .env file exists
 log_info "Checking configuration..."
 if [ ! -f ".env" ]; then
