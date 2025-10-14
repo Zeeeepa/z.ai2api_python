@@ -7,8 +7,9 @@ echo "╚═══════════════════════�
 echo ""
 echo "This script will:"
 echo "  1. Setup environment and retrieve token"
-echo "  2. Start the API server"
-echo "  3. Run comprehensive tests"
+echo "  2. Start the OpenAI-compatible API server"
+echo "  3. Send test requests in OpenAI format"
+echo "  4. Keep server running for continued use"
 echo ""
 
 # Colors
@@ -24,10 +25,12 @@ if [ ! -f "pyproject.toml" ]; then
     exit 1
 fi
 
-# Step 1: Setup
+# ============================================
+# STEP 1: SETUP & AUTHENTICATION
+# ============================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "📦 STEP 1/3: Setup & Authentication"
+echo "📦 STEP 1/4: Setup & Authentication"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -39,38 +42,43 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-read -p "Press Enter to continue to server startup..." -t 5 || true
-echo ""
+sleep 2
 
-# Step 2: Start Server
+# ============================================
+# STEP 2: START SERVER
+# ============================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🚀 STEP 2/3: Starting Server"
+echo "🚀 STEP 2/4: Starting OpenAI-Compatible Server"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 # Kill any existing server
-PORT=${PORT:-8080}
-if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "Cleaning up existing server on port $PORT..."
-    lsof -ti:$PORT | xargs kill -9 2>/dev/null || true
+LISTEN_PORT=${LISTEN_PORT:-8080}
+if lsof -Pi :$LISTEN_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo "🧹 Cleaning up existing server on port $LISTEN_PORT..."
+    lsof -ti:$LISTEN_PORT | xargs kill -9 2>/dev/null || true
     sleep 2
 fi
 
 # Start server in background
-echo "Starting server in background..."
+echo "🔄 Starting server in background..."
 bash scripts/start.sh > /tmp/z.ai2api_server.log 2>&1 &
 SERVER_PID=$!
 
-echo "Server PID: $SERVER_PID"
-echo "Waiting for server to be ready..."
+echo "   Server PID: $SERVER_PID"
+echo "   Log file: /tmp/z.ai2api_server.log"
+echo ""
+echo "⏳ Waiting for server to be ready..."
 
-# Wait for server to be ready (max 30 seconds)
+# Wait for server (max 30 seconds)
 MAX_WAIT=30
 WAITED=0
+SERVER_READY=false
+
 while [ $WAITED -lt $MAX_WAIT ]; do
-    if curl -s http://localhost:$PORT/v1/models > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Server is ready!${NC}"
+    if curl -s http://localhost:$LISTEN_PORT/health > /dev/null 2>&1; then
+        SERVER_READY=true
         break
     fi
     echo -n "."
@@ -80,7 +88,7 @@ done
 
 echo ""
 
-if [ $WAITED -ge $MAX_WAIT ]; then
+if [ "$SERVER_READY" = false ]; then
     echo -e "${RED}❌ Server failed to start within ${MAX_WAIT} seconds${NC}"
     echo ""
     echo "Last 20 lines of server log:"
@@ -89,14 +97,18 @@ if [ $WAITED -ge $MAX_WAIT ]; then
     exit 1
 fi
 
-echo ""
-read -p "Press Enter to continue to API tests..." -t 5 || true
+echo -e "${GREEN}✅ Server is ready!${NC}"
+echo "   URL: http://localhost:$LISTEN_PORT"
 echo ""
 
-# Step 3: Test API
+sleep 2
+
+# ============================================
+# STEP 3: TEST API WITH OPENAI FORMAT
+# ============================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🧪 STEP 3/3: Testing API"
+echo "🧪 STEP 3/4: Testing OpenAI-Compatible API"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -104,6 +116,61 @@ bash scripts/send_request.sh
 
 TEST_RESULT=$?
 
+# ============================================
+# STEP 4: SHOW PYTHON USAGE EXAMPLE
+# ============================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📚 STEP 4/4: Python Usage Example"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+cat << 'EOF'
+You can now use the server with OpenAI Python SDK:
+
+```python
+import openai
+
+# Initialize client pointing to local server
+client = openai.OpenAI(
+    base_url=f"http://localhost:8080/v1",  # Routes to Z.AI
+    api_key="your-zai-token"  # Z.AI bearer token
+)
+
+# Send chat completion request (OpenAI format)
+response = client.chat.completions.create(
+    model="GLM-4.5",
+    messages=[
+        {"role": "user", "content": "What is Python?"}
+    ],
+    stream=False
+)
+
+# Print response
+print(response.choices[0].message.content)
+
+# Streaming example
+stream = client.chat.completions.create(
+    model="GLM-4.5",
+    messages=[{"role": "user", "content": "Count to 5"}],
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end='')
+```
+
+The server automatically converts OpenAI format to Z.AI format:
+- OpenAI format IN: http://localhost:8080/v1/chat/completions
+- Z.AI format OUT: https://chat.z.ai/api/v1/chat/completions
+EOF
+
+echo ""
+
+# ============================================
+# SUMMARY
+# ============================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "📋 Complete Workflow Summary"
@@ -112,44 +179,37 @@ echo ""
 echo "  ✅ Setup: Complete"
 echo "  ✅ Server: Running (PID: $SERVER_PID)"
 if [ $TEST_RESULT -eq 0 ]; then
-    echo "  ✅ Tests: Passed"
+    echo "  ✅ Tests: All Passed"
 else
-    echo "  ⚠️  Tests: Some failures"
+    echo "  ⚠️  Tests: Some failures (check above)"
 fi
 echo ""
 echo "Server Details:"
-echo "  URL: http://localhost:$PORT"
-echo "  Log: /tmp/z.ai2api_server.log"
-echo "  PID: $SERVER_PID"
+echo "  📍 URL: http://localhost:$LISTEN_PORT/v1"
+echo "  📄 Log: /tmp/z.ai2api_server.log"
+echo "  🔢 PID: $SERVER_PID"
+echo "  🔄 Routes to: https://chat.z.ai/api/v1"
+echo ""
+echo "Useful Commands:"
+echo "  📊 View logs: tail -f /tmp/z.ai2api_server.log"
+echo "  🧪 Test again: bash scripts/send_request.sh"
+echo "  🛑 Stop server: kill $SERVER_PID"
 echo ""
 
-# Ask if user wants to keep server running
-echo ""
+# ============================================
+# KEEP SERVER RUNNING
+# ============================================
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-read -p "Keep server running? (Y/n): " -n 1 -r
+echo -e "${GREEN}🎉 Server is running and ready for requests!${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "The server will keep running in the background."
+echo "You can now use it with OpenAI SDK or curl."
 echo ""
 
-if [[ $REPLY =~ ^[Nn]$ ]]; then
-    echo "Stopping server..."
-    kill $SERVER_PID 2>/dev/null || true
-    echo -e "${GREEN}✅ Server stopped${NC}"
-else
-    echo -e "${GREEN}✅ Server is still running${NC}"
-    echo ""
-    echo "To stop the server later:"
-    echo "  kill $SERVER_PID"
-    echo "  OR: lsof -ti:$PORT | xargs kill"
-    echo ""
-    echo "To view logs:"
-    echo "  tail -f /tmp/z.ai2api_server.log"
-    echo ""
-    echo "To test again:"
-    echo "  bash scripts/send_request.sh"
-fi
+read -p "Press Enter to view live server logs (Ctrl+C to exit)..." 
+echo ""
 
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${GREEN}🎉 All done!${NC}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+# Show live logs
+tail -f /tmp/z.ai2api_server.log
 
