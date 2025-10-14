@@ -98,14 +98,24 @@ log_success "Python dependencies installed"
 
 # Step 3: Install Playwright
 log_info "Installing Playwright..."
-if ! python3 -c "import playwright" 2>/dev/null; then
+
+# Determine which Python command to use
+if command -v uv &> /dev/null; then
+    PYTHON_CMD="uv run python"
+    PLAYWRIGHT_CMD="uv run playwright"
+else
+    PYTHON_CMD="python3"
+    PLAYWRIGHT_CMD="python3 -m playwright"
+fi
+
+if ! $PYTHON_CMD -c "import playwright" 2>/dev/null; then
     log_info "Playwright not found, installing..."
     $PIP_CMD playwright
 fi
 
 # Install Playwright browsers
 log_info "Installing Playwright browsers (this may take a few minutes)..."
-python3 -m playwright install chromium
+$PLAYWRIGHT_CMD install chromium
 log_success "Playwright and browsers installed"
 
 # Step 4: Create .env file if it doesn't exist
@@ -215,4 +225,3 @@ echo "🔧 Admin Panel: http://localhost:8080/admin"
 echo ""
 echo "============================================================"
 echo ""
-

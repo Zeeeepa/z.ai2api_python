@@ -42,7 +42,7 @@ async def retrieve_zai_token(email: str, password: str, timeout: int = 60000) ->
             
             print("🌐 Navigating to Z.AI login page...")
             await page.goto('https://z.ai/', timeout=timeout)
-            await page.wait_for_load_state('networkidle', timeout=10000)
+            await page.wait_for_load_state('networkidle', timeout=30000)
             
             # Wait for and click login button
             print("🔍 Looking for login button...")
@@ -71,7 +71,7 @@ async def retrieve_zai_token(email: str, password: str, timeout: int = 60000) ->
                 if not login_clicked:
                     raise Exception("Could not find login button")
                 
-                await page.wait_for_load_state('networkidle', timeout=10000)
+                await page.wait_for_load_state('networkidle', timeout=30000)
             except Exception as e:
                 result['error'] = f"Login button not found: {str(e)}"
                 await browser.close()
