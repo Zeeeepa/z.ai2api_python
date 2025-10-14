@@ -46,73 +46,19 @@ if [ -n "$ZAI_EMAIL" ] && [ -n "$ZAI_PASSWORD" ]; then
         echo "   See CAPTCHA_SETUP.md for setup instructions"
     fi
     
-    # Attempt to get token automatically
+    # Attempt to get token automatically and store in database
     echo ""
-    echo "🎟️  Attempting automatic token retrieval..."
+    echo "🎟️  Initializing authentication tokens..."
     
-    # Create a simple Python script to get token
-    .venv/bin/python << 'ENDPYTHON'
-import sys
-import os
-import asyncio
-
-# Add project to path
-sys.path.insert(0, os.getcwd())
-
-async def get_token():
-    try:
-        from app.providers.zai_provider import ZAIProvider
-        from app.core.config import settings
-        
-        provider = ZAIProvider()
-        token = await provider.get_token()
-        
-        if token:
-            print(f"✅ Token retrieved successfully!")
-            print(f"   Token: {token[:30]}...")
-            
-            # Save to .env
-            env_file = ".env"
-            lines = []
-            token_found = False
-            
-            if os.path.exists(env_file):
-                with open(env_file, 'r') as f:
-                    for line in f:
-                        if line.startswith('AUTH_TOKEN='):
-                            lines.append(f'AUTH_TOKEN={token}\n')
-                            token_found = True
-                        else:
-                            lines.append(line)
-            
-            if not token_found:
-                lines.append(f'\nAUTH_TOKEN={token}\n')
-            
-            with open(env_file, 'w') as f:
-                f.writelines(lines)
-            
-            print(f"✅ Token saved to .env file")
-            return True
-        else:
-            print("❌ Failed to retrieve token")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-# Run async function
-success = asyncio.run(get_token())
-sys.exit(0 if success else 1)
-ENDPYTHON
+    .venv/bin/python scripts/init_tokens.py
     
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Token retrieval successful!${NC}"
+        echo -e "${GREEN}✅ Token initialization successful!${NC}"
+        echo "   Tokens stored in database and ready to use"
     else
-        echo -e "${YELLOW}⚠️  Automatic token retrieval failed${NC}"
-        echo "   Will use environment variables or guest mode"
+        echo -e "${YELLOW}⚠️  Automatic token initialization failed${NC}"
+        echo "   Server may not work properly without valid tokens"
+        echo "   Check the error messages above for details"
     fi
     
 elif [ -n "$AUTH_TOKEN" ]; then
@@ -183,4 +129,3 @@ echo "  1. Start server: bash scripts/start.sh"
 echo "  2. Test API: bash scripts/send_request.sh"
 echo "  Or run everything: bash scripts/all.sh"
 echo ""
-
