@@ -79,8 +79,8 @@ log_success "Server is responding"
 # Step 2: Prepare test request
 log_info "Preparing test request..."
 
-# Test message
-TEST_MESSAGE="Hello! Please introduce yourself briefly."
+# Test message - Real question about Graph-RAG
+TEST_MESSAGE="What is Graph-RAG?"
 
 # Create request payload
 REQUEST_PAYLOAD=$(cat <<EOF
@@ -229,11 +229,11 @@ STREAM_REQUEST=$(cat <<EOF
   "messages": [
     {
       "role": "user",
-      "content": "Count from 1 to 5."
+      "content": "Briefly explain the key benefits of Graph-RAG in 2-3 sentences."
     }
   ],
   "stream": true,
-  "max_tokens": 100
+  "max_tokens": 200
 }
 EOF
 )

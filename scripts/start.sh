@@ -2,7 +2,14 @@
 #
 # start.sh - Z.AI2API Server Startup Script
 #
-# This script starts the Z.AI2API server and monitors its health
+# This script starts the Z.AI2API server using the AUTH_TOKEN from .env
+# The token was retrieved via Playwright automation in setup.sh
+#
+# The server will:
+#  ✅ Load AUTH_TOKEN from .env file
+#  ✅ Use it to authenticate with Z.AI's chat interface
+#  ✅ Proxy all OpenAI API requests to real Z.AI service
+#  ✅ Return actual AI-generated responses
 #
 
 set -e  # Exit on error
@@ -59,6 +66,14 @@ log_success "Configuration file found"
 set -a
 source .env
 set +a
+
+# Verify AUTH_TOKEN is loaded
+if [ -n "$AUTH_TOKEN" ]; then
+    TOKEN_PREVIEW="${AUTH_TOKEN:0:10}..."
+    log_success "AUTH_TOKEN loaded: $TOKEN_PREVIEW"
+else
+    log_warning "AUTH_TOKEN not found in .env"
+fi
 
 # Get port from .env or use default
 PORT=${LISTEN_PORT:-8080}
@@ -186,4 +201,3 @@ trap "kill $TAIL_PID 2>/dev/null; echo ''; log_success 'Server is running in bac
 
 # Wait for tail to finish (won't happen unless killed)
 wait $TAIL_PID
-

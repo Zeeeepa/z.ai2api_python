@@ -2,10 +2,20 @@
 #
 # all.sh - Complete Z.AI2API Setup, Start, and Test Script
 #
-# This script orchestrates the complete workflow:
-# 1. Run setup.sh to configure environment and retrieve token
-# 2. Run start.sh to start the server
-# 3. Run send_openai_request.sh to test the API
+# This script orchestrates the complete workflow with REAL API calls:
+# 
+# 1. Run setup.sh
+#    ✅ Install dependencies
+#    ✅ Use Playwright to login and retrieve AUTH_TOKEN
+#    ✅ Save token to .env file
+#
+# 2. Run start.sh
+#    ✅ Start server using the retrieved AUTH_TOKEN
+#    ✅ Server proxies to real Z.AI chat interface
+#
+# 3. Run send_openai_request.sh
+#    ✅ Send REAL OpenAI API request: "What is Graph-RAG?"
+#    ✅ Display actual AI-generated response from Z.AI
 #
 # Usage:
 #   export QWEN_EMAIL=your-email@example.com
@@ -106,8 +116,9 @@ echo ""
 # Confirm with user
 echo "This script will:"
 echo "  1️⃣  Install dependencies and retrieve authentication token"
-echo "  2️⃣  Start the API server"
-echo "  3️⃣  Run API tests to verify functionality"
+echo "  2️⃣  Start the API server using the retrieved token"
+echo "  3️⃣  Send REAL API request: 'What is Graph-RAG?'"
+echo "  4️⃣  Display actual AI response from Z.AI"
 echo ""
 read -p "Continue? (y/N): " -n 1 -r
 echo ""
@@ -259,4 +270,3 @@ if [ -f "$PROJECT_ROOT/logs/server.log" ]; then
 else
     log_warning "Log file not found: logs/server.log"
 fi
-
