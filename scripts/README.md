@@ -2,13 +2,26 @@
 
 Complete automation suite for setting up, starting, and testing the Z.AI2API Python server.
 
+## 🔥 IMPORTANT: NO MOCKS - 100% REAL API CALLS
+
+**All scripts use ACTUAL API calls with REAL responses from Z.AI!**
+
+The `send_openai_request.sh` script makes genuine requests to your running server, which:
+- ✅ **Connects to real Z.AI chat interface** (not a mock)
+- ✅ **Uses your JWT token** from browser session
+- ✅ **Mimics web browser behavior** exactly
+- ✅ **Returns authentic AI responses** from Z.AI/GLM models
+- ✅ **Converts responses** to OpenAI API format
+
+**You see the actual AI-generated content, not fake data!**
+
 ## 📋 Overview
 
 This directory contains scripts to automate the entire workflow:
 
 1. **setup.sh** - Environment setup and token retrieval
 2. **start.sh** - Server startup and health monitoring
-3. **send_openai_request.sh** - API testing with OpenAI-compatible requests
+3. **send_openai_request.sh** - API testing with **REAL** OpenAI-compatible requests
 4. **all.sh** - Complete orchestration of all steps
 5. **retrieve_token.py** - Playwright-based token retrieval
 
@@ -44,10 +57,11 @@ bash scripts/all.sh
 
 This will:
 - ✅ Install all dependencies
-- ✅ Retrieve authentication token automatically
+- ✅ Retrieve authentication token automatically via Playwright
 - ✅ Start the server on port 8080
-- ✅ Test the API with sample requests
-- ✅ Display live logs
+- ✅ Test the API with **REAL requests to Z.AI** (no mocks!)
+- ✅ Display **actual AI-generated responses**
+- ✅ Show live logs
 
 ## 📖 Individual Scripts
 
@@ -119,7 +133,7 @@ curl http://localhost:8080/
 
 ### 3. send_openai_request.sh
 
-Tests the API with OpenAI-compatible requests:
+Tests the API with **REAL** OpenAI-compatible requests:
 
 ```bash
 bash scripts/send_openai_request.sh
@@ -127,10 +141,13 @@ bash scripts/send_openai_request.sh
 
 **What it does:**
 - Checks if server is running
-- Sends test chat completion request
-- Displays formatted response
-- Tests streaming mode
-- Validates API functionality
+- Sends **ACTUAL API calls** to your running server
+- Server proxies to **real Z.AI chat interface** using your JWT token
+- Displays **genuine AI-generated responses** from Z.AI/GLM models
+- Tests streaming mode with **real streaming responses**
+- Validates complete API functionality
+
+**NO MOCKS:** All responses are authentic AI-generated content from Z.AI's service!
 
 **Requirements:**
 - Server running on configured port
@@ -420,4 +437,3 @@ If you encounter issues:
 ---
 
 **Happy coding! 🚀**
-

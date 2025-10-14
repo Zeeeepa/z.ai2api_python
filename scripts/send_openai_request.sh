@@ -1,8 +1,17 @@
 #!/bin/bash
 #
-# send_openai_request.sh - Test Z.AI2API with OpenAI-compatible request
+# send_openai_request.sh - Test Z.AI2API with REAL OpenAI-compatible requests
 #
-# This script sends a test request to the running server and displays the response
+# This script makes ACTUAL API calls to your running z.ai2api_python server,
+# which proxies to the real Z.AI chat interface using your JWT token.
+# 
+# NO MOCKS - All responses are real AI-generated content from Z.AI!
+#
+# The server:
+#  ✅ Mimics a web browser accessing Z.AI's chat interface
+#  ✅ Uses the JWT token from your browser session
+#  ✅ Makes requests exactly like the web UI does
+#  ✅ Converts Z.AI's web responses to OpenAI API format
 #
 
 set -e  # Exit on error
@@ -275,4 +284,3 @@ echo "🔧 Admin Panel: http://localhost:$PORT/admin"
 echo ""
 echo "============================================================"
 echo ""
-
