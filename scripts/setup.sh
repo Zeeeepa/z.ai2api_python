@@ -49,16 +49,53 @@ if [ -n "$ZAI_EMAIL" ] && [ -n "$ZAI_PASSWORD" ]; then
     # Attempt to get token automatically and store in database
     echo ""
     echo "🎟️  Initializing authentication tokens..."
+    echo ""
     
-    .venv/bin/python scripts/init_tokens.py
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Token initialization successful!${NC}"
-        echo "   Tokens stored in database and ready to use"
+    # Method 1: Try browser automation (if playwright is available)
+    if .venv/bin/python -c "import playwright" 2>/dev/null; then
+        echo "🌐 Attempting browser-based login..."
+        echo "   This will use Playwright to automate the login"
+        echo ""
+        
+        .venv/bin/python scripts/browser_login.py
+        
+        if [ $? -eq 0 ]; then
+            echo ""
+            echo -e "${GREEN}✅ Browser login successful!${NC}"
+            echo "   Token extracted and stored in database"
+        else
+            echo ""
+            echo -e "${YELLOW}⚠️  Browser login failed${NC}"
+            echo "   Trying direct API login..."
+            echo ""
+            
+            # Fallback to direct API login
+            .venv/bin/python scripts/init_tokens.py
+            
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✅ Token initialization successful!${NC}"
+            else
+                echo -e "${RED}❌ Both login methods failed${NC}"
+                echo "   Server may not work properly"
+            fi
+        fi
     else
-        echo -e "${YELLOW}⚠️  Automatic token initialization failed${NC}"
-        echo "   Server may not work properly without valid tokens"
-        echo "   Check the error messages above for details"
+        echo "📡 Using direct API login..."
+        echo ""
+        
+        .venv/bin/python scripts/init_tokens.py
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✅ Token initialization successful!${NC}"
+            echo "   Tokens stored in database and ready to use"
+        else
+            echo -e "${YELLOW}⚠️  Automatic token initialization failed${NC}"
+            echo ""
+            echo "💡 TIP: Install Playwright for browser-based login:"
+            echo "   .venv/bin/pip install playwright"
+            echo "   .venv/bin/playwright install chromium"
+            echo "   sudo .venv/bin/playwright install-deps"
+        fi
     fi
     
 elif [ -n "$AUTH_TOKEN" ]; then
