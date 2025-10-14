@@ -1,332 +1,420 @@
 #!/usr/bin/env python3
 """
-Browser-based login using Playwright
-Automates Z.AI login and extracts authentication token
+Z.AI Browser-Based Login Automation with Playwright
+Handles CAPTCHA, dynamic loading, and token extraction
 """
+
 import asyncio
-import sys
 import os
-import json
+import sys
+from pathlib import Path
 
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.core.config import settings
-from app.utils.logger import logger
+from loguru import logger
+
+# Configure logger
+logger.remove()
+logger.add(sys.stderr, level="INFO", format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>")
 
 
-async def browser_login():
-    """Login to Z.AI using browser automation"""
+async def browser_login() -> str:
+    """
+    Automate Z.AI login using Playwright browser automation.
+    
+    Returns:
+        str: Authentication token extracted from browser
+    """
+    email = os.environ.get('ZAI_EMAIL')
+    password = os.environ.get('ZAI_PASSWORD')
+    
+    if not email or not password:
+        logger.error("❌ ZAI_EMAIL and ZAI_PASSWORD must be set!")
+        return None
+    
+    logger.info("🌐 Starting browser automation...")
+    logger.info(f"📧 Email: {email}")
     
     try:
         from playwright.async_api import async_playwright
     except ImportError:
-        logger.error("❌ Playwright not installed!")
-        logger.error("   Install with: pip install playwright")
-        logger.error("   Then run: playwright install chromium")
+        logger.error("❌ Playwright not installed. Run: pip install playwright && playwright install chromium")
         return None
-    
-    if not settings.ZAI_EMAIL or not settings.ZAI_PASSWORD:
-        logger.error("❌ ZAI_EMAIL or ZAI_PASSWORD not configured!")
-        return None
-    
-    logger.info("🌐 Starting browser automation...")
-    logger.info(f"📧 Email: {settings.ZAI_EMAIL}")
     
     async with async_playwright() as p:
-        # Launch browser
         logger.info("🚀 Launching browser...")
+        
+        # Launch browser with better defaults
         browser = await p.chromium.launch(
-            headless=True,  # Run in headless mode
-            args=['--no-sandbox', '--disable-setuid-sandbox']
+            headless=True,
+            args=[
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-web-security',
+            ]
         )
         
         context = await browser.new_context(
             viewport={'width': 1920, 'height': 1080},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
         )
         
         page = await context.new_page()
         
         try:
-            # Navigate to Z.AI
+            # Step 1: Navigate with multiple strategies
             logger.info("🔗 Navigating to https://chat.z.ai...")
-            await page.goto('https://chat.z.ai/', wait_until='networkidle', timeout=30000)
             
-            # Wait for page to load
-            await page.wait_for_timeout(3000)
+            try:
+                # Try fast load first
+                await page.goto('https://chat.z.ai/', wait_until='domcontentloaded', timeout=15000)
+            except Exception as e:
+                logger.warning(f"Fast load failed: {e}, trying slow load...")
+                await page.goto('https://chat.z.ai/', wait_until='load', timeout=30000)
             
-            # Take screenshot for debugging
-            await page.screenshot(path='/tmp/zai_homepage.png')
-            logger.info("📸 Screenshot saved to /tmp/zai_homepage.png")
+            # Wait for any initial animations/loading
+            await page.wait_for_timeout(2000)
             
-            # Look for sign-in button or form
-            logger.info("🔍 Looking for login form...")
+            # Take screenshot
+            await page.screenshot(path='/tmp/zai_step1_homepage.png')
+            logger.info("📸 Homepage screenshot: /tmp/zai_step1_homepage.png")
             
-            # Try to find sign-in link/button
+            # Step 2: Find and click sign-in button
+            logger.info("🔍 Looking for sign-in button...")
+            
+            signin_clicked = False
             signin_selectors = [
-                'a:has-text("Sign in")',
-                'button:has-text("Sign in")', 
-                'a:has-text("Login")',
-                'button:has-text("Login")',
-                '[href*="signin"]',
-                '[href*="login"]'
+                'text=Sign in',
+                'text=Sign In', 
+                'text=LOGIN',
+                'text=Login',
+                'button:has-text("Sign")',
+                'a:has-text("Sign")',
+                '[data-testid*="signin"]',
+                '[class*="signin"]',
+                '[id*="signin"]',
             ]
             
-            signin_element = None
             for selector in signin_selectors:
                 try:
-                    signin_element = await page.wait_for_selector(selector, timeout=2000)
-                    if signin_element:
-                        logger.info(f"✅ Found sign-in element: {selector}")
+                    element = await page.wait_for_selector(selector, timeout=3000, state='visible')
+                    if element:
+                        logger.info(f"✅ Found: {selector}")
+                        await element.click()
+                        signin_clicked = True
                         break
-                except:
+                except Exception:
                     continue
             
-            if signin_element:
-                # Click sign-in
-                logger.info("🖱️  Clicking sign-in button...")
-                await signin_element.click()
-                await page.wait_for_timeout(2000)
-                await page.screenshot(path='/tmp/zai_signin_page.png')
+            if not signin_clicked:
+                logger.warning("⚠️ No sign-in button found, assuming already on login page")
+            else:
+                # Wait for navigation after sign-in click
+                logger.info("⏳ Waiting for login form to load...")
+                await page.wait_for_timeout(3000)
+                
+                # Wait for page to be fully loaded
+                try:
+                    await page.wait_for_load_state('networkidle', timeout=10000)
+                except Exception:
+                    logger.warning("⚠️ Network not idle, continuing anyway...")
+                
+                await page.screenshot(path='/tmp/zai_step2_signin_clicked.png')
             
-            # Look for email input
+            # Step 3: Fill email field
             logger.info("📧 Looking for email input...")
+            
+            # Give extra time for form to render
+            await page.wait_for_timeout(2000)
+            
+            email_filled = False
             email_selectors = [
                 'input[type="email"]',
                 'input[name="email"]',
-                'input[placeholder*="email"]',
-                'input[id*="email"]'
+                'input[name="username"]',
+                'input[placeholder*="email" i]',
+                'input[placeholder*="Email" i]',
+                'input[id*="email"]',
+                'input[autocomplete="email"]',
+                'input[autocomplete="username"]',
+                'input.email',
+                'input#email',
+                'input#username',
             ]
             
-            email_input = None
+            # Try each selector
             for selector in email_selectors:
                 try:
-                    email_input = await page.wait_for_selector(selector, timeout=2000)
-                    if email_input:
-                        logger.info(f"✅ Found email input: {selector}")
+                    element = await page.wait_for_selector(selector, timeout=3000, state='visible')
+                    if element:
+                        logger.info(f"✅ Found email field: {selector}")
+                        await element.click()
+                        await page.wait_for_timeout(500)
+                        await element.fill(email)
+                        await page.wait_for_timeout(500)
+                        email_filled = True
                         break
-                except:
+                except Exception as e:
+                    logger.debug(f"Selector {selector} failed: {e}")
                     continue
             
-            if not email_input:
+            # If still not found, try to find any visible input
+            if not email_filled:
+                logger.warning("⚠️ Trying to find ANY visible input field...")
+                try:
+                    all_inputs = await page.query_selector_all('input[type="text"], input:not([type]), input[type="email"]')
+                    for input_el in all_inputs:
+                        is_visible = await input_el.is_visible()
+                        if is_visible:
+                            logger.info(f"✅ Found visible input, trying as email field")
+                            await input_el.click()
+                            await page.wait_for_timeout(500)
+                            await input_el.fill(email)
+                            email_filled = True
+                            break
+                except Exception as e:
+                    logger.debug(f"Generic input search failed: {e}")
+            
+            if not email_filled:
                 logger.error("❌ Could not find email input field")
-                await page.screenshot(path='/tmp/zai_error.png')
+                await page.screenshot(path='/tmp/zai_error_no_email.png')
                 return None
             
-            # Fill email
-            logger.info("✍️  Entering email...")
-            await email_input.fill(settings.ZAI_EMAIL)
-            await page.wait_for_timeout(500)
+            # Step 4: Fill password field
+            logger.info("🔐 Looking for password input...")
             
-            # Look for password input
-            logger.info("🔒 Looking for password input...")
+            password_filled = False
             password_selectors = [
                 'input[type="password"]',
                 'input[name="password"]',
-                'input[placeholder*="password"]',
-                'input[id*="password"]'
+                'input[placeholder*="password" i]',
+                'input[placeholder*="Password" i]',
+                'input[id*="password"]',
             ]
             
-            password_input = None
             for selector in password_selectors:
                 try:
-                    password_input = await page.wait_for_selector(selector, timeout=2000)
-                    if password_input:
-                        logger.info(f"✅ Found password input: {selector}")
+                    element = await page.wait_for_selector(selector, timeout=3000, state='visible')
+                    if element:
+                        logger.info(f"✅ Found password field: {selector}")
+                        await element.click()
+                        await element.fill(password)
+                        password_filled = True
                         break
-                except:
+                except Exception:
                     continue
             
-            if not password_input:
+            if not password_filled:
                 logger.error("❌ Could not find password input field")
-                await page.screenshot(path='/tmp/zai_error.png')
+                await page.screenshot(path='/tmp/zai_error_no_password.png')
                 return None
             
-            # Fill password
-            logger.info("✍️  Entering password...")
-            await password_input.fill(settings.ZAI_PASSWORD)
-            await page.wait_for_timeout(500)
+            await page.wait_for_timeout(1000)
+            await page.screenshot(path='/tmp/zai_step3_credentials_filled.png')
+            logger.info("📸 Credentials filled: /tmp/zai_step3_credentials_filled.png")
             
-            # Take screenshot before submit
-            await page.screenshot(path='/tmp/zai_before_submit.png')
-            logger.info("📸 Form filled, screenshot saved")
+            # Step 5: Check for CAPTCHA
+            logger.info("🤖 Checking for CAPTCHA...")
             
-            # Look for submit button
-            logger.info("🔍 Looking for submit button...")
+            captcha_detected = False
+            captcha_selectors = [
+                'iframe[src*="captcha"]',
+                'iframe[src*="recaptcha"]',
+                'iframe[title*="captcha" i]',
+                '[class*="captcha"]',
+                '[id*="captcha"]',
+                '.g-recaptcha',
+                '#captcha',
+            ]
+            
+            for selector in captcha_selectors:
+                try:
+                    element = await page.query_selector(selector)
+                    if element:
+                        captcha_detected = True
+                        logger.warning(f"⚠️ CAPTCHA detected: {selector}")
+                        break
+                except Exception:
+                    continue
+            
+            if captcha_detected:
+                logger.warning("⚠️ CAPTCHA present - waiting 30 seconds for manual solve...")
+                logger.warning("   If running headless, you need to solve CAPTCHA manually")
+                logger.warning("   Consider using headless=False for debugging")
+                await page.wait_for_timeout(30000)
+            else:
+                logger.info("✅ No CAPTCHA detected")
+            
+            # Step 6: Submit form
+            logger.info("📤 Submitting login form...")
+            
+            submit_clicked = False
             submit_selectors = [
                 'button[type="submit"]',
                 'button:has-text("Sign in")',
                 'button:has-text("Login")',
                 'button:has-text("Continue")',
-                'input[type="submit"]'
+                'button:has-text("Submit")',
+                'input[type="submit"]',
+                '[data-testid*="submit"]',
             ]
             
-            submit_button = None
             for selector in submit_selectors:
                 try:
-                    submit_button = await page.wait_for_selector(selector, timeout=2000)
-                    if submit_button:
+                    element = await page.wait_for_selector(selector, timeout=3000, state='visible')
+                    if element:
                         logger.info(f"✅ Found submit button: {selector}")
+                        await element.click()
+                        submit_clicked = True
                         break
-                except:
+                except Exception:
                     continue
             
-            if not submit_button:
-                logger.error("❌ Could not find submit button")
-                # Try pressing Enter instead
-                logger.info("⌨️  Trying Enter key...")
+            if not submit_clicked:
+                logger.warning("⚠️ No submit button found, trying Enter key...")
                 await page.keyboard.press('Enter')
-            else:
-                logger.info("🖱️  Clicking submit button...")
-                await submit_button.click()
             
-            # Wait for navigation or CAPTCHA
-            logger.info("⏳ Waiting for response...")
-            await page.wait_for_timeout(5000)
+            # Step 7: Wait for navigation after login
+            logger.info("⏳ Waiting for login to complete...")
             
-            # Check current URL
-            current_url = page.url
-            logger.info(f"📍 Current URL: {current_url}")
-            
-            # Take screenshot after submit
-            await page.screenshot(path='/tmp/zai_after_submit.png')
-            logger.info("📸 After submit screenshot saved")
-            
-            # Check for CAPTCHA
-            page_content = await page.content()
-            if 'captcha' in page_content.lower() or 'recaptcha' in page_content.lower():
-                logger.warning("⚠️  CAPTCHA detected!")
-                logger.warning("   Z.AI requires CAPTCHA solving")
-                logger.warning("   Consider using a CAPTCHA solving service")
-                return None
-            
-            # Try to extract token from localStorage or cookies
-            logger.info("🔑 Attempting to extract authentication token...")
-            
-            # Method 1: localStorage
             try:
-                token = await page.evaluate('''() => {
-                    return localStorage.getItem('token') || 
-                           localStorage.getItem('auth_token') ||
-                           localStorage.getItem('access_token') ||
-                           localStorage.getItem('jwt');
-                }''')
-                
-                if token:
-                    logger.info(f"✅ Token found in localStorage!")
-                    logger.info(f"   Token: {token[:30]}...")
-                    return token
-            except Exception as e:
-                logger.debug(f"localStorage check failed: {e}")
+                # Wait for URL change or specific elements
+                await page.wait_for_url('**/chat**', timeout=15000)
+                logger.info("✅ URL changed to chat page")
+            except Exception:
+                logger.warning("⚠️ URL didn't change, waiting for dashboard elements...")
+                await page.wait_for_timeout(5000)
             
-            # Method 2: Cookies
-            try:
-                cookies = await context.cookies()
-                for cookie in cookies:
-                    if 'token' in cookie['name'].lower() or 'auth' in cookie['name'].lower():
-                        logger.info(f"✅ Token found in cookie: {cookie['name']}")
-                        logger.info(f"   Token: {cookie['value'][:30]}...")
-                        return cookie['value']
-            except Exception as e:
-                logger.debug(f"Cookie check failed: {e}")
+            await page.screenshot(path='/tmp/zai_step4_after_login.png')
+            logger.info("📸 After login: /tmp/zai_step4_after_login.png")
             
-            # Method 3: Check if logged in by looking for user elements
-            logger.info("🔍 Checking if login successful...")
-            logged_in = False
+            # Step 8: Extract token from localStorage
+            logger.info("🔑 Extracting authentication token...")
             
-            logged_in_selectors = [
-                '[data-user]',
-                '.user-profile',
-                '.avatar',
-                'button:has-text("Logout")',
-                'a:has-text("Settings")'
+            # Try multiple token keys
+            token_keys = [
+                'token',
+                'auth_token',
+                'authToken', 
+                'access_token',
+                'accessToken',
+                'jwt',
+                'bearer',
+                'user_token',
             ]
             
-            for selector in logged_in_selectors:
+            token = None
+            for key in token_keys:
                 try:
-                    element = await page.query_selector(selector)
-                    if element:
-                        logger.info(f"✅ Login indicator found: {selector}")
-                        logged_in = True
+                    token = await page.evaluate(f'localStorage.getItem("{key}")')
+                    if token and len(token) > 20:
+                        logger.info(f"✅ Token found in localStorage['{key}']")
+                        logger.info(f"   Token preview: {token[:30]}...")
                         break
-                except:
+                except Exception:
                     continue
             
-            if logged_in:
-                logger.info("✅ Login appears successful!")
-                logger.info("💡 Token extraction may require different method")
-                logger.info("   Check browser DevTools for token location")
-            else:
-                logger.error("❌ Login may have failed")
-                logger.error("   Check screenshots in /tmp/ for details")
+            # Try cookies if localStorage didn't work
+            if not token:
+                logger.info("🍪 Trying to extract token from cookies...")
+                cookies = await context.cookies()
+                for cookie in cookies:
+                    if any(keyword in cookie['name'].lower() for keyword in ['token', 'auth', 'jwt', 'bearer']):
+                        token = cookie['value']
+                        logger.info(f"✅ Token found in cookie: {cookie['name']}")
+                        logger.info(f"   Token preview: {token[:30]}...")
+                        break
             
+            if not token:
+                logger.error("❌ Could not extract token from browser")
+                logger.info("💡 Check screenshots in /tmp/ for debugging")
+                
+                # Dump localStorage for debugging
+                all_storage = await page.evaluate('JSON.stringify(localStorage)')
+                logger.debug(f"localStorage contents: {all_storage}")
+                
+                return None
+            
+            # Step 9: Store token in database
+            logger.info("💾 Storing token in database...")
+            
+            from app.services.token_dao import TokenDAO
+            dao = TokenDAO()
+            await dao.init_database()
+            
+            token_id = await dao.add_token(
+                provider="zai",
+                token=token,
+                token_type="user",
+                priority=10,
+                validate=False
+            )
+            
+            if token_id:
+                logger.success(f"✅ Token stored successfully! ID: {token_id}")
+            else:
+                logger.error("❌ Failed to store token in database")
+                return None
+            
+            return token
+            
+        except Exception as e:
+            logger.error(f"❌ Browser automation error: {e}")
+            await page.screenshot(path='/tmp/zai_error_final.png')
+            logger.info("📸 Error screenshot: /tmp/zai_error_final.png")
+            import traceback
+            logger.debug(traceback.format_exc())
             return None
             
         finally:
-            await browser.close()
             logger.info("🔒 Browser closed")
-    
-    return None
+            await browser.close()
 
 
-async def main():
+async def main() -> int:
     """Main entry point"""
     logger.info("=" * 50)
     logger.info("🌐 Z.AI Browser Login Automation")
     logger.info("=" * 50)
     logger.info("")
     
-    token = await browser_login()
-    
-    if token:
-        logger.info("")
-        logger.info("=" * 50)
-        logger.info("✅ SUCCESS! Token retrieved")
-        logger.info("=" * 50)
-        logger.info(f"Token: {token[:50]}...")
-        logger.info("")
-        logger.info("💾 Storing token...")
+    try:
+        token = await browser_login()
         
-        # Store in database
-        from app.services.token_dao import TokenDAO
-        token_dao = TokenDAO()
-        await token_dao.init_database()
-        
-        token_id = await token_dao.add_token(
-            provider="zai",
-            token=token,
-            token_type="user",
-            priority=10,
-            validate=False
-        )
-        
-        if token_id:
-            logger.info(f"✅ Token stored in database! ID: {token_id}")
+        if token:
+            logger.success("=" * 50)
+            logger.success("✅ Login Successful!")
+            logger.success("=" * 50)
+            logger.success("")
+            logger.success(f"Token: {token[:50]}...")
+            logger.success("")
+            logger.success("Next steps:")
+            logger.success("  1. Server will use this token automatically")
+            logger.success("  2. Run: bash scripts/start.sh")
+            logger.success("  3. Test: bash scripts/send_request.sh")
             return 0
         else:
-            logger.error("❌ Failed to store token")
+            logger.error("=" * 50)
+            logger.error("❌ Login Failed")
+            logger.error("=" * 50)
+            logger.error("")
+            logger.error("Possible reasons:")
+            logger.error("  1. CAPTCHA blocking (try headless=False)")
+            logger.error("  2. Wrong credentials")
+            logger.error("  3. Page structure changed")
+            logger.error("")
+            logger.error("Check screenshots in /tmp/ for debugging")
             return 1
-    else:
-        logger.error("")
-        logger.error("=" * 50)
-        logger.error("❌ FAILED to retrieve token")
-        logger.error("=" * 50)
-        logger.error("")
-        logger.error("Possible issues:")
-        logger.error("1. CAPTCHA requirement")
-        logger.error("2. Invalid credentials")
-        logger.error("3. Page structure changed")
-        logger.error("")
-        logger.error("Check screenshots in /tmp/ for details:")
-        logger.error("  - /tmp/zai_homepage.png")
-        logger.error("  - /tmp/zai_signin_page.png")
-        logger.error("  - /tmp/zai_before_submit.png")
-        logger.error("  - /tmp/zai_after_submit.png")
+            
+    except Exception as e:
+        logger.error(f"❌ Fatal error: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
         return 1
 
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())
     sys.exit(exit_code)
-
