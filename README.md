@@ -29,8 +29,8 @@ git clone https://github.com/Zeeeepa/z.ai2api_python.git
 cd z.ai2api_python
 
 # 2. 设置环境变量
-export QWEN_EMAIL=your-email@example.com
-export QWEN_PASSWORD=your-password
+export ZAI_EMAIL=your-email@example.com
+export ZAI_PASSWORD=your-password
 
 # 3. 运行自动化脚本
 bash scripts/all.sh

@@ -49,12 +49,12 @@ echo ""
 
 # Check for required environment variables
 log_info "Checking environment variables..."
-if [ -z "$QWEN_EMAIL" ] || [ -z "$QWEN_PASSWORD" ]; then
-    log_error "QWEN_EMAIL and QWEN_PASSWORD environment variables must be set"
+if [ -z "$ZAI_EMAIL" ] || [ -z "$ZAI_PASSWORD" ]; then
+    log_error "ZAI_EMAIL and ZAI_PASSWORD environment variables must be set"
     echo ""
     echo "Usage:"
-    echo "  export QWEN_EMAIL=your-email@example.com"
-    echo "  export QWEN_PASSWORD=your-password"
+    echo "  export ZAI_EMAIL=your-email@example.com"
+    echo "  export ZAI_PASSWORD=your-password"
     echo "  bash scripts/setup.sh"
     echo ""
     exit 1

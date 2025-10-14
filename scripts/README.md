@@ -39,8 +39,8 @@ This directory contains scripts to automate the entire workflow:
 Set these before running the scripts:
 
 ```bash
-export QWEN_EMAIL=your-email@example.com
-export QWEN_PASSWORD=your-password
+export ZAI_EMAIL=your-email@example.com
+export ZAI_PASSWORD=your-password
 ```
 
 ### One-Command Setup
@@ -50,8 +50,8 @@ Run everything at once:
 ```bash
 git clone https://github.com/Zeeeepa/z.ai2api_python.git
 cd z.ai2api_python
-export QWEN_EMAIL=your-email@example.com
-export QWEN_PASSWORD=your-password
+export ZAI_EMAIL=your-email@example.com
+export ZAI_PASSWORD=your-password
 bash scripts/all.sh
 ```
 
@@ -70,8 +70,8 @@ This will:
 Performs initial environment setup:
 
 ```bash
-export QWEN_EMAIL=your-email@example.com
-export QWEN_PASSWORD=your-password
+export ZAI_EMAIL=your-email@example.com
+export ZAI_PASSWORD=your-password
 bash scripts/setup.sh
 ```
 
@@ -85,8 +85,8 @@ bash scripts/setup.sh
 - Initializes SQLite database
 
 **Requirements:**
-- `QWEN_EMAIL` environment variable
-- `QWEN_PASSWORD` environment variable
+- `ZAI_EMAIL` environment variable
+- `ZAI_PASSWORD` environment variable
 
 **Output:**
 - `.env` file with valid `AUTH_TOKEN`
@@ -163,8 +163,8 @@ bash scripts/send_openai_request.sh
 Orchestrates complete workflow:
 
 ```bash
-export QWEN_EMAIL=your-email@example.com
-export QWEN_PASSWORD=your-password
+export ZAI_EMAIL=your-email@example.com
+export ZAI_PASSWORD=your-password
 bash scripts/all.sh
 ```
 
@@ -199,8 +199,8 @@ python scripts/retrieve_token.py
 - Saves token to `.env` file
 
 **Requirements:**
-- `QWEN_EMAIL` environment variable
-- `QWEN_PASSWORD` environment variable
+- `ZAI_EMAIL` environment variable
+- `ZAI_PASSWORD` environment variable
 - Playwright installed with browsers
 
 ## 🔧 Configuration
@@ -305,11 +305,11 @@ bash scripts/send_openai_request.sh
 
 ### Setup Issues
 
-**Problem:** `QWEN_EMAIL and QWEN_PASSWORD must be set`
+**Problem:** `ZAI_EMAIL and ZAI_PASSWORD must be set`
 ```bash
 # Solution: Export environment variables
-export QWEN_EMAIL=your-email@example.com
-export QWEN_PASSWORD=your-password
+export ZAI_EMAIL=your-email@example.com
+export ZAI_PASSWORD=your-password
 ```
 
 **Problem:** `Playwright browsers not found`
@@ -343,8 +343,8 @@ python3 -c "import fastapi, granian, httpx"
 **Problem:** `Failed to retrieve token`
 ```bash
 # Solution 1: Check credentials
-echo $QWEN_EMAIL
-echo $QWEN_PASSWORD
+echo $ZAI_EMAIL
+echo $ZAI_PASSWORD
 
 # Solution 2: Run token retrieval with verbose output
 python3 scripts/retrieve_token.py
@@ -396,7 +396,7 @@ all.sh
 
 - **Never commit** `.env` file to version control
 - **Keep** `AUTH_TOKEN` private
-- **Use** strong passwords for QWEN_EMAIL account
+- **Use** strong passwords for ZAI_EMAIL account
 - **Rotate** tokens regularly
 - **Monitor** `logs/server.log` for suspicious activity
 
@@ -422,7 +422,7 @@ all.sh
 - Enable `DEBUG_LOGGING=true` when troubleshooting
 - Check `logs/server.log` for detailed error messages
 - Use `send_openai_request.sh` to verify changes
-- Keep `QWEN_PASSWORD` secure
+- Keep `ZAI_PASSWORD` secure
 
 ## 🆘 Getting Help
 

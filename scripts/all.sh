@@ -18,8 +18,8 @@
 #    ✅ Display actual AI-generated response from Z.AI
 #
 # Usage:
-#   export QWEN_EMAIL=your-email@example.com
-#   export QWEN_PASSWORD=your-password
+#   export ZAI_EMAIL=your-email@example.com
+#   export ZAI_PASSWORD=your-password
 #   bash scripts/all.sh
 #
 
@@ -95,13 +95,13 @@ echo ""
 log_info "Performing pre-flight checks..."
 
 # Check if required environment variables are set
-if [ -z "$QWEN_EMAIL" ] || [ -z "$QWEN_PASSWORD" ]; then
+if [ -z "$ZAI_EMAIL" ] || [ -z "$ZAI_PASSWORD" ]; then
     log_error "Required environment variables not set"
     echo ""
     echo "Please export the following environment variables:"
     echo ""
-    echo "  export QWEN_EMAIL=your-email@example.com"
-    echo "  export QWEN_PASSWORD=your-password"
+    echo "  export ZAI_EMAIL=your-email@example.com"
+    echo "  export ZAI_PASSWORD=your-password"
     echo ""
     echo "Then run:"
     echo "  bash scripts/all.sh"
@@ -110,7 +110,7 @@ if [ -z "$QWEN_EMAIL" ] || [ -z "$QWEN_PASSWORD" ]; then
 fi
 
 log_success "Environment variables verified"
-log_info "Email: $QWEN_EMAIL"
+log_info "Email: $ZAI_EMAIL"
 echo ""
 
 # Confirm with user

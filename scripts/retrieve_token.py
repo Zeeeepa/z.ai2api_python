@@ -210,11 +210,11 @@ async def retrieve_zai_token(email: str, password: str, timeout: int = 60000) ->
 async def main():
     """Main entry point"""
     # Get credentials from environment variables
-    email = os.getenv('QWEN_EMAIL')
-    password = os.getenv('QWEN_PASSWORD')
+    email = os.getenv('ZAI_EMAIL')
+    password = os.getenv('ZAI_PASSWORD')
     
     if not email or not password:
-        print("❌ Error: QWEN_EMAIL and QWEN_PASSWORD environment variables must be set")
+        print("❌ Error: ZAI_EMAIL and ZAI_PASSWORD environment variables must be set")
         sys.exit(1)
     
     print("=" * 60)
