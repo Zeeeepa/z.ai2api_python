@@ -70,7 +70,9 @@ def generate_signature(message_text: str, request_id: str, timestamp_ms: int, us
     r = str(timestamp_ms)
     e = f"requestId,{request_id},timestamp,{timestamp_ms},user_id,{user_id}"
     t = message_text or ""
-    i = f"{e}|{t}|{r}"
+    # Add content_base64 processing for new signature algorithm
+    content_base64 = base64.b64encode(t.encode('utf-8')).decode('ascii')
+    i = f"{e}|{content_base64}|{r}"
 
     window_index = timestamp_ms // (5 * 60 * 1000)
     root_key = (secret or "junjie").encode("utf-8")

@@ -67,7 +67,7 @@ def get_zai_dynamic_headers(chat_id: str = "") -> Dict[str, str]:
         # UA and app-specific headers
         "User-Agent": user_agent,
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "X-FE-Version": "prod-fe-1.0.79",
+        "X-FE-Version": "prod-fe-1.0.98",
         "Origin": "https://chat.z.ai",
     }
 
