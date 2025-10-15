@@ -20,13 +20,15 @@ class Settings(BaseSettings):
     TOKEN_RECOVERY_TIMEOUT: int = int(os.getenv("TOKEN_RECOVERY_TIMEOUT", "1800"))  # 30分钟后重试失败的token
 
     # Model Configuration
-    PRIMARY_MODEL: str = os.getenv("PRIMARY_MODEL", "GLM-4.5")
-    THINKING_MODEL: str = os.getenv("THINKING_MODEL", "GLM-4.5-Thinking")
-    SEARCH_MODEL: str = os.getenv("SEARCH_MODEL", "GLM-4.5-Search")
-    AIR_MODEL: str = os.getenv("AIR_MODEL", "GLM-4.5-Air")
+    GLM45_MODEL: str = os.getenv("GLM45_MODEL", "GLM-4.5")
+    GLM45_THINKING_MODEL: str = os.getenv("GLM45_THINKING_MODEL", "GLM-4.5-Thinking")
+    GLM45_SEARCH_MODEL: str = os.getenv("GLM45_SEARCH_MODEL", "GLM-4.5-Search")
+    GLM45_AIR_MODEL: str = os.getenv("GLM45_AIR_MODEL", "GLM-4.5-Air")
+    GLM45V_MODEL: str = os.getenv("GLM45V_MODEL", "GLM-4.5V")
     GLM46_MODEL: str = os.getenv("GLM46_MODEL", "GLM-4.6")
     GLM46_THINKING_MODEL: str = os.getenv("GLM46_THINKING_MODEL", "GLM-4.6-Thinking")
     GLM46_SEARCH_MODEL: str = os.getenv("GLM46_SEARCH_MODEL", "GLM-4.6-Search")
+    GLM46_ADVANCED_SEARCH_MODEL: str = os.getenv("GLM46_ADVANCED_SEARCH_MODEL", "GLM-4.6-advanced-search")
 
     # Provider Model Mapping
     @property
@@ -38,9 +40,11 @@ class Settings(BaseSettings):
             "GLM-4.5-Thinking": "zai",
             "GLM-4.5-Search": "zai",
             "GLM-4.5-Air": "zai",
+            "GLM-4.5V": "zai",
             "GLM-4.6": "zai",
             "GLM-4.6-Thinking": "zai",
             "GLM-4.6-Search": "zai",
+            "GLM-4.6-advanced-search": "zai",
             # K2Think models
             "MBZUAI-IFM/K2-Think": "k2think",
             # LongCat models
@@ -64,6 +68,10 @@ class Settings(BaseSettings):
 
     # Provider Configuration
     DEFAULT_PROVIDER: str = os.getenv("DEFAULT_PROVIDER", "zai")  # 默认提供商：zai/k2think/longcat
+
+    # Admin Panel Authentication
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")  # 管理后台密码
+    SESSION_SECRET_KEY: str = os.getenv("SESSION_SECRET_KEY", "your-secret-key-change-in-production")  # Session 密钥
 
     # Browser Headers
     CLIENT_HEADERS: Dict[str, str] = {

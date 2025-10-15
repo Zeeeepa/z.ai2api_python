@@ -1,17 +1,25 @@
 """
 管理后台路由模块
 """
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from datetime import datetime
 import os
 
+from app.admin.auth import require_auth
+
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """登录页面"""
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@router.get("/", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
 async def dashboard(request: Request):
     """仪表盘首页"""
     from app.utils.token_pool import get_token_pool
@@ -56,7 +64,7 @@ async def dashboard(request: Request):
     return templates.TemplateResponse("index.html", context)
 
 
-@router.get("/config", response_class=HTMLResponse)
+@router.get("/config", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
 async def config_page(request: Request):
     """配置管理页面"""
     from app.core.config import settings
@@ -90,7 +98,7 @@ async def config_page(request: Request):
     return templates.TemplateResponse("config.html", context)
 
 
-@router.get("/monitor", response_class=HTMLResponse)
+@router.get("/monitor", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
 async def monitor_page(request: Request):
     """服务监控页面"""
     context = {
@@ -99,7 +107,7 @@ async def monitor_page(request: Request):
     return templates.TemplateResponse("monitor.html", context)
 
 
-@router.get("/tokens", response_class=HTMLResponse)
+@router.get("/tokens", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
 async def tokens_page(request: Request):
     """Token 管理页面"""
     context = {

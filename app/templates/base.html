@@ -58,7 +58,24 @@
 
     {% block extra_head %}{% endblock %}
 </head>
-<body class="h-full" x-data="{ sidebarOpen: true }">
+<body class="h-full" x-data="{
+    sidebarOpen: true,
+    async logout() {
+        if (confirm('确定要登出吗？')) {
+            try {
+                const response = await fetch('/admin/api/logout', {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    window.location.href = '/admin/login';
+                }
+            } catch (err) {
+                console.error('登出失败:', err);
+                alert('登出失败，请稍后重试');
+            }
+        }
+    }
+}">
     <div class="min-h-full">
         <!-- 顶部导航栏 -->
         <nav class="bg-indigo-600 shadow-lg">
@@ -86,6 +103,16 @@
                             </span>
                             <span class="ml-2 text-sm">服务运行中</span>
                         </div>
+
+                        <!-- 登出按钮 -->
+                        <button
+                            @click="logout()"
+                            class="flex items-center text-white hover:bg-indigo-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                            <svg class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                            登出
+                        </button>
                     </div>
                 </div>
             </div>

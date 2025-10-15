@@ -4,13 +4,76 @@
 """
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from datetime import datetime
 from app.utils.logger import logger
 import os
 
 router = APIRouter(prefix="/admin/api", tags=["admin-api"])
 templates = Jinja2Templates(directory="app/templates")
+
+
+# ==================== 认证 API ====================
+
+@router.post("/login")
+async def login(request: Request):
+    """管理后台登录"""
+    from app.admin.auth import create_session
+
+    try:
+        data = await request.json()
+        password = data.get("password", "")
+
+        # 创建 session
+        session_token = create_session(password)
+
+        if session_token:
+            # 登录成功，设置 cookie
+            response = JSONResponse({
+                "success": True,
+                "message": "登录成功"
+            })
+            response.set_cookie(
+                key="admin_session",
+                value=session_token,
+                httponly=True,
+                max_age=86400,  # 24小时
+                samesite="lax"
+            )
+            logger.info("✅ 管理后台登录成功")
+            return response
+        else:
+            # 密码错误
+            logger.warning("❌ 管理后台登录失败：密码错误")
+            return JSONResponse({
+                "success": False,
+                "message": "密码错误"
+            }, status_code=401)
+
+    except Exception as e:
+        logger.error(f"❌ 登录异常: {e}")
+        return JSONResponse({
+            "success": False,
+            "message": "登录失败"
+        }, status_code=500)
+
+
+@router.post("/logout")
+async def logout(request: Request):
+    """管理后台登出"""
+    from app.admin.auth import delete_session, get_session_token_from_request
+
+    session_token = get_session_token_from_request(request)
+    delete_session(session_token)
+
+    # 清除 cookie
+    response = JSONResponse({
+        "success": True,
+        "message": "已登出"
+    })
+    response.delete_cookie("admin_session")
+    logger.info("✅ 管理后台已登出")
+    return response
 
 
 async def reload_settings():

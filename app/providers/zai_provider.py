@@ -14,19 +14,75 @@ import hashlib
 import base64
 from urllib.parse import urlencode
 import os
+import uuid
+import random
 from datetime import datetime
 from typing import Dict, List, Any, Optional, AsyncGenerator, Union
-
+from app.utils.user_agent import get_random_user_agent
 from app.providers.base import BaseProvider, ProviderConfig
 from app.models.schemas import OpenAIRequest, Message
 from app.core.config import settings
 from app.utils.logger import get_logger
 from app.utils.token_pool import get_token_pool
-from app.core.zai_transformer import generate_uuid, get_zai_dynamic_headers
-from app.utils.sse_tool_handler import SSEToolHandler
+from app.utils.tool_call_handler import (
+    process_messages_with_tools,
+    parse_and_extract_tool_calls,
+)
 
 logger = get_logger()
 
+def generate_uuid() -> str:
+    """生成UUID v4"""
+    return str(uuid.uuid4())
+
+def get_zai_dynamic_headers(chat_id: str = "") -> Dict[str, str]:
+    """生成 Z.AI 特定的动态浏览器 headers"""
+    browser_choices = ["chrome", "chrome", "chrome", "edge", "edge", "firefox", "safari"]
+    browser_type = random.choice(browser_choices)
+    user_agent = get_random_user_agent(browser_type)
+
+    chrome_version = "139"
+    edge_version = "139"
+
+    if "Chrome/" in user_agent:
+        try:
+            chrome_version = user_agent.split("Chrome/")[1].split(".")[0]
+        except:
+            pass
+
+    if "Edg/" in user_agent:
+        try:
+            edge_version = user_agent.split("Edg/")[1].split(".")[0]
+            sec_ch_ua = f'"Microsoft Edge";v="{edge_version}", "Chromium";v="{chrome_version}", "Not_A Brand";v="24"'
+        except:
+            sec_ch_ua = f'"Not_A Brand";v="8", "Chromium";v="{chrome_version}", "Google Chrome";v="{chrome_version}"'
+    elif "Firefox/" in user_agent:
+        sec_ch_ua = None
+    else:
+        sec_ch_ua = f'"Not_A Brand";v="8", "Chromium";v="{chrome_version}", "Google Chrome";v="{chrome_version}"'
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+        "Connection": "keep-alive",
+        "Cache-Control": "no-cache",
+        "User-Agent": user_agent,
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "X-FE-Version": "prod-fe-1.0.98",
+        "Origin": "https://chat.z.ai",
+    }
+
+    if sec_ch_ua:
+        headers["sec-ch-ua"] = sec_ch_ua
+        headers["sec-ch-ua-mobile"] = "?0"
+        headers["sec-ch-ua-platform"] = '"Windows"'
+
+    if chat_id:
+        headers["Referer"] = f"https://chat.z.ai/c/{chat_id}"
+    else:
+        headers["Referer"] = "https://chat.z.ai/"
+
+    return headers
 
 def _urlsafe_b64decode(data: str) -> bytes:
     """Decode a URL-safe base64 string with proper padding."""
@@ -99,25 +155,29 @@ class ZAIProvider(BaseProvider):
         
         # 模型映射
         self.model_mapping = {
-            settings.PRIMARY_MODEL: "0727-360B-API",  # GLM-4.5
-            settings.THINKING_MODEL: "0727-360B-API",  # GLM-4.5-Thinking
-            settings.SEARCH_MODEL: "0727-360B-API",  # GLM-4.5-Search
-            settings.AIR_MODEL: "0727-106B-API",  # GLM-4.5-Air
+            settings.GLM45_MODEL: "0727-360B-API",  # GLM-4.5
+            settings.GLM45_THINKING_MODEL: "0727-360B-API",  # GLM-4.5-Thinking
+            settings.GLM45_SEARCH_MODEL: "0727-360B-API",  # GLM-4.5-Search
+            settings.GLM45_AIR_MODEL: "0727-106B-API",  # GLM-4.5-Air
+            settings.GLM45V_MODEL: "glm-4.5v",  # GLM-4.5V多模态
             settings.GLM46_MODEL: "GLM-4-6-API-V1",  # GLM-4.6
             settings.GLM46_THINKING_MODEL: "GLM-4-6-API-V1",  # GLM-4.6-Thinking
             settings.GLM46_SEARCH_MODEL: "GLM-4-6-API-V1",  # GLM-4.6-Search
+            settings.GLM46_ADVANCED_SEARCH_MODEL: "GLM-4-6-API-V1",  # GLM-4.6-advanced-search
         }
     
     def get_supported_models(self) -> List[str]:
         """获取支持的模型列表"""
         return [
-            settings.PRIMARY_MODEL,
-            settings.THINKING_MODEL,
-            settings.SEARCH_MODEL,
-            settings.AIR_MODEL,
+            settings.GLM45_MODEL,
+            settings.GLM45_THINKING_MODEL,
+            settings.GLM45_SEARCH_MODEL,
+            settings.GLM45_AIR_MODEL,
+            settings.GLM45V_MODEL,
             settings.GLM46_MODEL,
             settings.GLM46_THINKING_MODEL,
             settings.GLM46_SEARCH_MODEL,
+            settings.GLM46_ADVANCED_SEARCH_MODEL,
         ]
     
     async def get_token(self) -> str:
@@ -166,76 +226,299 @@ class ZAIProvider(BaseProvider):
         token_pool = get_token_pool()
         if token_pool:
             token_pool.mark_token_failure(token, error)
-    
+
+    async def upload_image(self, data_url: str, chat_id: str, token: str, user_id: str) -> Optional[Dict]:
+        """上传 base64 编码的图片到 Z.AI 服务器
+
+        Args:
+            data_url: data:image/xxx;base64,... 格式的图片数据
+            chat_id: 当前对话ID
+            token: 认证令牌
+            user_id: 用户ID
+
+        Returns:
+            上传成功返回完整的文件信息字典，失败返回None
+        """
+        if settings.ANONYMOUS_MODE or not data_url.startswith("data:"):
+            return None
+
+        try:
+            # 解析 data URL
+            header, encoded = data_url.split(",", 1)
+            mime_type = header.split(";")[0].split(":")[1] if ":" in header else "image/jpeg"
+
+            # 解码 base64 数据
+            image_data = base64.b64decode(encoded)
+            filename = str(uuid.uuid4())
+
+            self.logger.debug(f"📤 上传图片: {filename}, 大小: {len(image_data)} bytes")
+
+            # 构建上传请求 - 使用简化的请求头配置
+            upload_url = f"{self.base_url}/api/v1/files/"
+            headers = {
+                "Accept": "*/*",
+                "Accept-Language": "zh-CN,zh;q=0.9",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Origin": f"{self.base_url}",
+                "Pragma": "no-cache",
+                "Referer": f"{self.base_url}/c/{chat_id}",
+                "Sec-Ch-Ua": '"Microsoft Edge";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0",
+                "Authorization": f"Bearer {token}",
+            }
+
+            # 使用 httpx 上传文件
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                files = {
+                    "file": (filename, image_data, mime_type)
+                }
+                response = await client.post(upload_url, files=files, headers=headers)
+
+                if response.status_code == 200:
+                    result = response.json()
+                    file_id = result.get("id")
+                    file_name = result.get("filename")
+                    file_size = len(image_data)
+
+                    self.logger.info(f"✅ 图片上传成功: {file_id}_{file_name}")
+
+                    # 返回符合 Z.AI 格式的文件信息
+                    current_timestamp = int(time.time())
+                    return {
+                        "type": "image",
+                        "file": {
+                            "id": file_id,
+                            "user_id": user_id,
+                            "hash": None,
+                            "filename": file_name,
+                            "data": {},
+                            "meta": {
+                                "name": file_name,
+                                "content_type": mime_type,
+                                "size": file_size,
+                                "data": {},
+                            },
+                            "created_at": current_timestamp,
+                            "updated_at": current_timestamp
+                        },
+                        "id": file_id,
+                        "url": f"/api/v1/files/{file_id}/content",
+                        "name": file_name,
+                        "status": "uploaded",
+                        "size": file_size,
+                        "error": "",
+                        "itemId": str(uuid.uuid4()),
+                        "media": "image"
+                    }
+                else:
+                    self.logger.error(f"❌ 图片上传失败: {response.status_code} - {response.text}")
+                    return None
+
+        except Exception as e:
+            self.logger.error(f"❌ 图片上传异常: {e}")
+            return None
+
     async def transform_request(self, request: OpenAIRequest) -> Dict[str, Any]:
         """转换OpenAI请求为Z.AI格式"""
         self.logger.info(f"🔄 转换 OpenAI 请求到 Z.AI 格式: {request.model}")
-        
+
         # 获取认证令牌
         token = await self.get_token()
-        
-        # 处理消息格式
+        user_id = _extract_user_id_from_token(token)
+
+        # 生成 chat_id（用于图片上传）
+        chat_id = generate_uuid()
+
+        # 处理消息格式 - Z.AI 使用单独的 files 字段传递图片
         messages = []
+        files = []  # 存储上传的图片文件信息
+
         for msg in request.messages:
             if isinstance(msg.content, str):
+                # 纯文本消息
                 messages.append({
                     "role": msg.role,
                     "content": msg.content
                 })
             elif isinstance(msg.content, list):
-                # 处理多模态内容
-                content_parts = []
+                # 多模态内容：分离文本和图片
+                text_parts = []
+                image_parts = []  # 存储图片引用
+
                 for part in msg.content:
-                    if hasattr(part, 'type') and hasattr(part, 'text'):
-                        content_parts.append({
-                            "type": part.type,
-                            "text": part.text
-                        })
-                messages.append({
-                    "role": msg.role,
-                    "content": content_parts
-                })
+                    if hasattr(part, 'type'):
+                        if part.type == 'text' and hasattr(part, 'text'):
+                            # 文本部分
+                            text_parts.append(part.text or '')
+                        elif part.type == 'image_url' and hasattr(part, 'image_url'):
+                            # 图片部分 - 提取并上传
+                            image_url = None
+                            if hasattr(part.image_url, 'url'):
+                                image_url = part.image_url.url
+                            elif isinstance(part.image_url, dict) and 'url' in part.image_url:
+                                image_url = part.image_url['url']
+
+                            if image_url:
+                                self.logger.debug(f"✅ 检测到图片: {image_url[:50]}...")
+
+                                # 如果是 base64 编码的图片，上传并添加到 files 数组
+                                if image_url.startswith("data:") and not settings.ANONYMOUS_MODE:
+                                    self.logger.info(f"🔄 上传 base64 图片到 Z.AI 服务器")
+                                    file_info = await self.upload_image(image_url, chat_id, token, user_id)
+
+                                    if file_info:
+                                        files.append(file_info)
+                                        self.logger.info(f"✅ 图片已添加到 files 数组")
+
+                                        # 在消息中保留图片引用
+                                        image_ref = f"{file_info['id']}_{file_info['name']}"
+                                        image_parts.append({
+                                            "type": "image_url",
+                                            "image_url": {
+                                                "url": image_ref
+                                            }
+                                        })
+                                        self.logger.debug(f"📎 图片引用: {image_ref}")
+                                    else:
+                                        # 上传失败，添加错误提示
+                                        self.logger.warning(f"⚠️ 图片上传失败")
+                                        text_parts.append("[系统提示: 图片上传失败]")
+                                else:
+                                    # 非 base64 图片或匿名模式，直接使用原URL
+                                    if not settings.ANONYMOUS_MODE:
+                                        self.logger.warning(f"⚠️ 非 base64 图片或匿名模式，保留原始URL")
+                                    image_parts.append({
+                                        "type": "image_url",
+                                        "image_url": {"url": image_url}
+                                    })
+                    elif isinstance(part, dict):
+                        # 直接是字典格式的内容
+                        if part.get('type') == 'text':
+                            text_parts.append(part.get('text', ''))
+                        elif part.get('type') == 'image_url':
+                            image_url = part.get('image_url', {}).get('url', '')
+                            if image_url:
+                                self.logger.debug(f"✅ 检测到图片: {image_url[:50]}...")
+
+                                # 如果是 base64 编码的图片，上传并添加到 files 数组
+                                if image_url.startswith("data:") and not settings.ANONYMOUS_MODE:
+                                    self.logger.info(f"🔄 上传 base64 图片到 Z.AI 服务器")
+                                    file_info = await self.upload_image(image_url, chat_id, token, user_id)
+
+                                    if file_info:
+                                        files.append(file_info)
+                                        self.logger.info(f"✅ 图片已添加到 files 数组")
+
+                                        # 在消息中保留图片引用
+                                        image_ref = f"{file_info['id']}_{file_info['name']}"
+                                        image_parts.append({
+                                            "type": "image_url",
+                                            "image_url": {
+                                                "url": image_ref
+                                            }
+                                        })
+                                        self.logger.debug(f"📎 图片引用: {image_ref}")
+                                    else:
+                                        # 上传失败，添加错误提示
+                                        self.logger.warning(f"⚠️ 图片上传失败")
+                                        text_parts.append("[系统提示: 图片上传失败]")
+                                else:
+                                    # 非 base64 图片或匿名模式
+                                    if not settings.ANONYMOUS_MODE:
+                                        self.logger.warning(f"⚠️ 非 base64 图片或匿名模式，保留原始URL")
+                                    image_parts.append({
+                                        "type": "image_url",
+                                        "image_url": {"url": image_url}
+                                    })
+                    elif isinstance(part, str):
+                        # 纯字符串部分
+                        text_parts.append(part)
+
+                # 构建多模态消息内容
+                message_content = []
+
+                # 添加文本部分
+                combined_text = " ".join(text_parts).strip()
+                if combined_text:
+                    message_content.append({
+                        "type": "text",
+                        "text": combined_text
+                    })
+
+                # 添加图片部分（保持图片引用在消息中）
+                message_content.extend(image_parts)
+
+                # 只有在有内容时才添加消息
+                if message_content:
+                    messages.append({
+                        "role": msg.role,
+                        "content": message_content  # ✅ 多模态内容数组
+                    })
         
         # 确定请求的模型特性
-        # Extract last user message text for signing
+        # Extract last user message text for signing (提取最后一条用户消息的文本用于签名)
         last_user_text = ""
         for m in reversed(messages):
             if m.get("role") == "user":
                 content = m.get("content")
                 if isinstance(content, str):
+                    # 纯文本消息
                     last_user_text = content
                     break
                 elif isinstance(content, list):
+                    # 多模态消息：只提取文本部分用于签名
                     texts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
-                    last_user_text = "\n".join([t for t in texts if t])
+                    last_user_text = " ".join([t for t in texts if t]).strip()
                     break
         requested_model = request.model
         is_thinking = "-thinking" in requested_model.casefold()
         is_search = "-search" in requested_model.casefold()
+        is_advanced_search = requested_model == settings.GLM46_ADVANCED_SEARCH_MODEL
         is_air = "-air" in requested_model.casefold()
-        
+
         # 获取上游模型ID
         upstream_model_id = self.model_mapping.get(requested_model, "0727-360B-API")
-        
+
+        # ⚠️ 重要：在构建 body 之前处理工具调用！
+        # 处理工具支持 - 使用提示词注入方式
+        if settings.TOOL_SUPPORT and not is_thinking and request.tools:
+            tool_choice = getattr(request, 'tool_choice', 'auto') or 'auto'
+            messages = process_messages_with_tools(
+                messages=messages,
+                tools=request.tools,
+                tool_choice=tool_choice
+            )
+            self.logger.info(f"🔧 工具调用已通过提示词注入: {len(request.tools)} 个工具")
+
         # 构建MCP服务器列表
         mcp_servers = []
-        if is_search and "-4.5" in requested_model:
+        if is_advanced_search:
+            mcp_servers.append("advanced-search")
+            self.logger.info("🔍 检测到高级搜索模型，添加 advanced-search MCP 服务器")
+        elif is_search and "-4.5" in requested_model:
             mcp_servers.append("deep-web-search")
             self.logger.info("🔍 检测到搜索模型，添加 deep-web-search MCP 服务器")
-        
-        # 构建上游请求体
-        chat_id = generate_uuid()
-        
+
+        # 构建上游请求体（chat_id 已在前面生成）
+
         body = {
             "stream": True,  # 总是使用流式
             "model": upstream_model_id,
-            "messages": messages,
+            "messages": messages,  # ✅ messages 已经包含工具提示词
+            "signature_prompt": last_user_text,  # 用于签名的最后一条用户消息
+            "files": files,  # 图片文件数组
             "params": {},
             "features": {
                 "image_generation": False,
-                "web_search": is_search,
-                "auto_web_search": is_search,
-                "preview_mode": False,
+                "web_search": is_search or is_advanced_search,
+                "auto_web_search": is_search or is_advanced_search,
+                "preview_mode": is_search or is_advanced_search,
                 "flags": [],
                 "features": [
                     {
@@ -294,13 +577,9 @@ class ZAIProvider(BaseProvider):
             "chat_id": chat_id,
             "id": generate_uuid(),
         }
-        
-        # 处理工具支持
-        if settings.TOOL_SUPPORT and not is_thinking and request.tools:
-            body["tools"] = request.tools
-            self.logger.info(f"启用工具支持: {len(request.tools)} 个工具")
-        else:
-            body["tools"] = None
+
+        # 不传递 tools 给上游,使用提示工程方式
+        body["tools"] = None
         
         # 处理其他参数
         if request.temperature is not None:
@@ -399,6 +678,8 @@ class ZAIProvider(BaseProvider):
                 http2=True,
             ) as client:
                 self.logger.info(f"🎯 发送请求到 Z.AI: {transformed['url']}")
+                self.logger.info(f"📦 请求体 model: {transformed['body']['model']}")
+                self.logger.info(f"📦 请求体 messages: {json.dumps(transformed['body']['messages'], ensure_ascii=False)}")
                 async with client.stream(
                     "POST",
                     transformed["url"],
@@ -474,23 +755,12 @@ class ZAIProvider(BaseProvider):
         """处理Z.AI流式响应"""
         self.logger.info(f"✅ Z.AI 响应成功，开始处理 SSE 流")
 
-        # 初始化工具处理器（如果需要）
-        has_tools = transformed["body"].get("tools") is not None
-        tool_handler = None
-        # Early ack: send an assistant role chunk immediately so the client sees progress
-        try:
-            role_chunk = self.create_openai_chunk(
-                chat_id,
-                model,
-                {"role": "assistant"}
-            )
-            yield await self.format_sse_chunk(role_chunk)
-        except Exception:
-            pass
+        # 检查是否启用了工具调用 (通过检查原始请求)
+        has_tools = settings.TOOL_SUPPORT and request.tools is not None and len(request.tools) > 0
 
-        if has_tools:
-            tool_handler = SSEToolHandler(model, stream=True)
-            self.logger.info(f"🔧 初始化工具处理器: {len(transformed['body'].get('tools', []))} 个工具")
+        # 累积内容缓冲区,用于提取工具调用
+        buffered_content = ""
+        has_sent_role = False
 
         # 处理状态
         has_thinking = False
@@ -537,23 +807,8 @@ class ZAIProvider(BaseProvider):
                                     self.logger.info(f"📈 SSE 阶段: {phase}")
                                     self._last_phase = phase
 
-                                # 使用工具处理器处理所有阶段
-                                if tool_handler:
-                                    # 构建 SSE 数据块，包含所有必要字段
-                                    sse_chunk = {
-                                        "phase": phase,
-                                        "edit_content": data.get("edit_content", ""),
-                                        "delta_content": data.get("delta_content", ""),
-                                        "edit_index": data.get("edit_index"),
-                                        "usage": data.get("usage", {})
-                                    }
-
-                                    # 处理工具调用并输出结果
-                                    for output in tool_handler.process_sse_chunk(sse_chunk):
-                                        yield output
-
-                                # 非工具调用模式 - 处理思考内容
-                                elif phase == "thinking":
+                                # 处理思考内容
+                                if phase == "thinking":
                                     if not has_thinking:
                                         has_thinking = True
                                         # 发送初始角色
@@ -588,92 +843,183 @@ class ZAIProvider(BaseProvider):
 
                                 # 处理答案内容
                                 elif phase == "answer":
-                                    edit_content = data.get("edit_content", "")
                                     delta_content = data.get("delta_content", "")
+                                    edit_content = data.get("edit_content", "")
 
-                                    # 处理思考结束和答案开始
-                                    if edit_content and "</details>\n" in edit_content:
-                                        if has_thinking:
-                                            # 发送思考签名
-                                            thinking_signature = str(int(time.time() * 1000))
-                                            sig_chunk = self.create_openai_chunk(
-                                                chat_id,
-                                                model,
-                                                {
-                                                    "role": "assistant",
-                                                    "thinking": {
-                                                        "content": "",
-                                                        "signature": thinking_signature,
-                                                    }
-                                                }
-                                            )
-                                            yield await self.format_sse_chunk(sig_chunk)
+                                    # 累积内容(用于工具调用提取)
+                                    if delta_content:
+                                        buffered_content += delta_content
+                                    elif edit_content:
+                                        buffered_content = edit_content
 
-                                        # 提取答案内容
-                                        content_after = edit_content.split("</details>\n")[-1]
-                                        if content_after:
-                                            content_chunk = self.create_openai_chunk(
-                                                chat_id,
-                                                model,
-                                                {
-                                                    "role": "assistant",
-                                                    "content": content_after
-                                                }
-                                            )
-                                            yield await self.format_sse_chunk(content_chunk)
-
-                                    # 处理增量内容
-                                    elif delta_content:
-                                        # 如果还没有发送角色
-                                        if not has_thinking:
-                                            role_chunk = self.create_openai_chunk(
-                                                chat_id,
-                                                model,
-                                                {"role": "assistant"}
-                                            )
-                                            yield await self.format_sse_chunk(role_chunk)
-
-                                        content_chunk = self.create_openai_chunk(
-                                            chat_id,
-                                            model,
-                                            {
-                                                "role": "assistant",
-                                                "content": delta_content
-                                            }
-                                        )
-                                        output_data = await self.format_sse_chunk(content_chunk)
-                                        self.logger.debug(f"➡️ 输出内容块到客户端: {output_data}")
-                                        yield output_data
-
-                                    # 处理完成
+                                    # 如果包含 usage,说明流式结束
                                     if data.get("usage"):
-                                        self.logger.info(f"📦 完成响应 - 使用统计: {json.dumps(data['usage'])}")
+                                        usage = data["usage"]
+                                        self.logger.info(f"📦 完成响应 - 使用统计: {json.dumps(usage)}")
 
-                                        # 只有在非工具调用模式下才发送普通完成信号
-                                        if not tool_handler:
+                                        # 尝试从缓冲区提取 tool_calls
+                                        tool_calls = None
+                                        cleaned_content = buffered_content
+
+                                        if has_tools:
+                                            tool_calls, cleaned_content = parse_and_extract_tool_calls(buffered_content)
+
+                                        if tool_calls:
+                                            # 发现工具调用
+                                            self.logger.info(f"🔧 从响应中提取到 {len(tool_calls)} 个工具调用")
+
+                                            if not has_sent_role:
+                                                role_chunk = self.create_openai_chunk(
+                                                    chat_id,
+                                                    model,
+                                                    {"role": "assistant"}
+                                                )
+                                                yield await self.format_sse_chunk(role_chunk)
+                                                has_sent_role = True
+
+                                            # 发送工具调用
+                                            for idx, tc in enumerate(tool_calls):
+                                                tool_chunk = self.create_openai_chunk(
+                                                    chat_id,
+                                                    model,
+                                                    {
+                                                        "role": "assistant",
+                                                        "tool_calls": [{
+                                                            "index": idx,
+                                                            "id": tc.get("id", f"call_{idx}"),
+                                                            "type": "function",
+                                                            "function": {
+                                                                "name": tc.get("function", {}).get("name", ""),
+                                                                "arguments": tc.get("function", {}).get("arguments", "")
+                                                            }
+                                                        }]
+                                                    }
+                                                )
+                                                yield await self.format_sse_chunk(tool_chunk)
+
+                                            # 发送完成块
+                                            finish_chunk = self.create_openai_chunk(
+                                                chat_id,
+                                                model,
+                                                {"role": "assistant"},
+                                                "tool_calls"
+                                            )
+                                            finish_chunk["usage"] = usage
+                                            yield await self.format_sse_chunk(finish_chunk)
+                                            yield "data: [DONE]\n\n"
+
+                                        else:
+                                            # 没有工具调用,正常返回内容
+                                            # 处理思考结束和答案开始
+                                            if edit_content and "</details>\n" in edit_content:
+                                                if has_thinking:
+                                                    # 发送思考签名
+                                                    thinking_signature = str(int(time.time() * 1000))
+                                                    sig_chunk = self.create_openai_chunk(
+                                                        chat_id,
+                                                        model,
+                                                        {
+                                                            "role": "assistant",
+                                                            "thinking": {
+                                                                "content": "",
+                                                                "signature": thinking_signature,
+                                                            }
+                                                        }
+                                                    )
+                                                    yield await self.format_sse_chunk(sig_chunk)
+
+                                                # 提取答案内容
+                                                cleaned_content = edit_content.split("</details>\n")[-1]
+
+                                            if not has_sent_role and not has_thinking:
+                                                role_chunk = self.create_openai_chunk(
+                                                    chat_id,
+                                                    model,
+                                                    {"role": "assistant"}
+                                                )
+                                                yield await self.format_sse_chunk(role_chunk)
+                                                has_sent_role = True
+
+                                            if cleaned_content:
+                                                content_chunk = self.create_openai_chunk(
+                                                    chat_id,
+                                                    model,
+                                                    {
+                                                        "role": "assistant",
+                                                        "content": cleaned_content
+                                                    }
+                                                )
+                                                yield await self.format_sse_chunk(content_chunk)
+
                                             finish_chunk = self.create_openai_chunk(
                                                 chat_id,
                                                 model,
                                                 {"role": "assistant", "content": ""},
                                                 "stop"
                                             )
-                                            finish_chunk["usage"] = data["usage"]
-
-                                            finish_output = await self.format_sse_chunk(finish_chunk)
-                                            self.logger.debug(f"➡️ 发送完成信号: {finish_output[:1000]}...")
-                                            yield finish_output
-                                            self.logger.debug("➡️ 发送 [DONE]")
+                                            finish_chunk["usage"] = usage
+                                            yield await self.format_sse_chunk(finish_chunk)
                                             yield "data: [DONE]\n\n"
+                                    else:
+                                        # 流式过程中,输出答案内容（即使有工具调用也要显示）
+                                        # 处理思考结束和答案开始
+                                        if edit_content and "</details>\n" in edit_content:
+                                            if has_thinking:
+                                                # 发送思考签名
+                                                thinking_signature = str(int(time.time() * 1000))
+                                                sig_chunk = self.create_openai_chunk(
+                                                    chat_id,
+                                                    model,
+                                                    {
+                                                        "role": "assistant",
+                                                        "thinking": {
+                                                            "content": "",
+                                                            "signature": thinking_signature,
+                                                        }
+                                                    }
+                                                )
+                                                yield await self.format_sse_chunk(sig_chunk)
+
+                                            # 提取答案内容
+                                            content_after = edit_content.split("</details>\n")[-1]
+                                            if content_after:
+                                                content_chunk = self.create_openai_chunk(
+                                                    chat_id,
+                                                    model,
+                                                    {
+                                                        "role": "assistant",
+                                                        "content": content_after
+                                                    }
+                                                )
+                                                yield await self.format_sse_chunk(content_chunk)
+
+                                        # 处理增量内容
+                                        elif delta_content:
+                                            if not has_sent_role and not has_thinking:
+                                                role_chunk = self.create_openai_chunk(
+                                                    chat_id,
+                                                    model,
+                                                    {"role": "assistant"}
+                                                )
+                                                yield await self.format_sse_chunk(role_chunk)
+                                                has_sent_role = True
+
+                                            content_chunk = self.create_openai_chunk(
+                                                chat_id,
+                                                model,
+                                                {
+                                                    "role": "assistant",
+                                                    "content": delta_content
+                                                }
+                                            )
+                                            output_data = await self.format_sse_chunk(content_chunk)
+                                            self.logger.debug(f"➡️ 输出内容块到客户端: {output_data}")
+                                            yield output_data
 
                         except json.JSONDecodeError as e:
                             self.logger.debug(f"❌ JSON解析错误: {e}, 内容: {chunk_str[:1000]}")
                         except Exception as e:
                             self.logger.error(f"❌ 处理chunk错误: {e}")
-
-            # 工具处理器会自动发送结束信号，这里不需要重复发送
-            if not tool_handler:
-                self.logger.debug("📤 发送最终 [DONE] 信号")
-                yield "data: [DONE]\n\n"
 
             self.logger.info(f"✅ SSE 流处理完成，共处理 {line_count} 行数据")
 

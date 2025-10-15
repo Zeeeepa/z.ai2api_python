@@ -5,11 +5,17 @@ from typing import Dict, List, Optional, Any, Union, Literal
 from pydantic import BaseModel
 
 
+class ImageUrl(BaseModel):
+    """Image URL model for vision content"""
+    url: str
+
+
 class ContentPart(BaseModel):
     """Content part model for OpenAI's new content format"""
 
     type: str
     text: Optional[str] = None
+    image_url: Optional[ImageUrl] = None  # 添加 image_url 字段
 
 
 class Message(BaseModel):

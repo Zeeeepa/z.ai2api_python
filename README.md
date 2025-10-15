@@ -16,6 +16,7 @@
 - 🐳 **容器化部署** - Docker/Docker Compose 一键部署
 - 🔄 **Token 池** - 智能轮询、容错恢复、健康检查
 - 📊 **管理后台** - 实时监控、配置管理
+- 🔐 **安全认证** - 密码保护的管理后台访问
 
 ## 🚀 快速开始
 
@@ -48,10 +49,12 @@ uv run python main.py  # 或 python main.py
 
 **首次运行会自动初始化数据库**，访问以下地址：
 - API 文档：http://localhost:8080/docs
-- 管理后台：http://localhost:8080/admin
+- 管理后台：http://localhost:8080/admin（**需要登录**）
 - Token 管理：http://localhost:8080/admin/tokens
 
-> ⚠️ **重要**：请妥善保管 `AUTH_TOKEN`，不要泄露给他人
+> ⚠️ **重要**：
+> - 请妥善保管 `AUTH_TOKEN`，不要泄露给他人
+> - 管理后台默认密码为 `admin123`，**首次使用后请立即修改**
 
 ### Docker 部署
 
@@ -110,9 +113,11 @@ docker-compose up -d
 | `GLM-4.5-Thinking` | 0727-360B-API | 思考模型，显示推理过程 |
 | `GLM-4.5-Search` | 0727-360B-API | 搜索模型，实时联网 |
 | `GLM-4.5-Air` | 0727-106B-API | 轻量模型，快速响应 |
-| `GLM-4.6` | GLM-4-6-API-V1 | 新版标准模型 |
-| `GLM-4.6-Thinking` | GLM-4-6-API-V1 | 新版思考模型 |
-| `GLM-4.6-Search` | GLM-4-6-API-V1 | 新版搜索模型 |
+| `GLM-4.5V` | glm-4.5v | 多模态模型，支持图像理解 |
+| `GLM-4.6` | GLM-4-6-API-V1 | 新版标准模型，200K 上下文 |
+| `GLM-4.6-Thinking` | GLM-4-6-API-V1 | 新版思考模型，增强推理 |
+| `GLM-4.6-Search` | GLM-4-6-API-V1 | 新版搜索模型，改进联网能力 |
+| `GLM-4.6-advanced-search` | GLM-4-6-API-V1 | 高级搜索模型，深度研究 |
 
 ### K2Think 提供商
 
@@ -135,6 +140,7 @@ docker-compose up -d
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
 | `AUTH_TOKEN` | `sk-your-api-key` | 客户端访问密钥（必填） |
+| `ADMIN_PASSWORD` | `admin123` | 管理后台登录密码（**强烈建议修改**） |
 | `LISTEN_PORT` | `8080` | 服务监听端口 |
 | `DEBUG_LOGGING` | `false` | 调试日志（支持热重载） |
 | `ANONYMOUS_MODE` | `true` | Z.AI 匿名模式 |
@@ -150,6 +156,36 @@ docker-compose up -d
 | `TOKEN_RECOVERY_TIMEOUT` | Token 恢复超时（默认 1800 秒） |
 
 > 💡 详细配置请参考 [.env.example](.env.example)
+
+## 🔐 管理后台登录
+
+### 首次登录
+
+1. 启动服务后访问：http://localhost:8080/admin
+2. 自动跳转到登录页面
+3. 输入管理密码（默认：`admin123`）
+4. 登录成功后进入仪表盘
+
+### 修改密码
+
+在 `.env` 文件中修改 `ADMIN_PASSWORD`：
+
+```bash
+# 使用强密码（推荐 12 位以上）
+ADMIN_PASSWORD=Your_Secure_Password_2025!
+```
+
+重启服务后生效。
+
+### 安全特性
+
+- ✅ **Session 管理**：基于 Cookie 的安全 Session
+- ✅ **自动过期**：登录后 24 小时自动失效
+- ✅ **HttpOnly Cookie**：防止 XSS 攻击
+- ✅ **SameSite 保护**：防止 CSRF 攻击
+- ✅ **随机 Token**：使用加密安全的随机数生成
+
+> 💡 详细文档：[管理后台登录功能使用说明](管理后台登录功能使用说明.md)
 
 ## 🔄 Token 管理
 
@@ -167,10 +203,11 @@ http://localhost:8080/admin
 
 ### 管理后台功能
 
+- ✅ **密码保护** - 安全的登录认证
 - ✅ Token 增删改查
 - ✅ 批量导入/导出
 - ✅ 启用/禁用 Token
-- ✅ Token有效性检测
+- ✅ Token 有效性检测
 - ✅ 多提供商支持（Z.AI/K2Think/LongCat）
 
 ### Token 池机制
@@ -190,7 +227,13 @@ A: `AUTH_TOKEN` 是自定义的 API 密钥，用于客户端访问本服务，�
 A: 匿名模式使用临时 Token 访问 Z.AI，避免对话历史共享，保护隐私。设置 `ANONYMOUS_MODE=true` 启用。
 
 ### Q: 如何管理 Token？
-A: 访问 Web 管理后台 http://localhost:8080/admin/tokens 即可增删改查 Token，支持批量导入导出。
+A: 访问 Web 管理后台 http://localhost:8080/admin/tokens（需要先登录）即可增删改查 Token，支持批量导入导出。
+
+### Q: 忘记管理后台密码怎么办？
+A: 在 `.env` 文件中修改 `ADMIN_PASSWORD` 为新密码，然后重启服务即可。
+
+### Q: 如何禁用管理后台登录？
+A: 当前版本暂不支持禁用登录功能。如有需要，请手动移除路由中的 `dependencies=[Depends(require_auth)]`。
 
 
 ## 🔑 获取 Token
@@ -252,13 +295,6 @@ A: 访问 Web 管理后台 http://localhost:8080/admin/tokens 即可增删改查
                           │(tokens) │
                           └─────────┘
 ```
-
-## 📚 相关文档
-
-- [CLAUDE.md](CLAUDE.md) - 项目架构和 AI 使用指引
-- [TOKEN_MIGRATION.md](docs/TOKEN_MIGRATION.md) - Token 数据库迁移指南
-- [ADMIN_README.md](docs/ADMIN_README.md) - Web 管理后台使用手册
-- [DEBUG_LOGGING_FIX.md](docs/DEBUG_LOGGING_FIX.md) - 调试日志热重载修复
 
 ## 🤝 贡献指南
 

@@ -65,11 +65,12 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+test_*.py
 
-# 文档
-docs/
-*.md
-README*
+# 文档（保留必要文档，排除开发文档）
+# docs/ - 保留所有文档用于生产环境
+# *.md - 保留所有 Markdown 文档
+# README* - 保留 README
 
 # 备份文件
 backup/
@@ -87,6 +88,12 @@ temp/
 .env.*.local
 *tokens.txt
 !*tokens.txt.example
+
+# 数据库文件（运行时生成）
+tokens.db
+tokens.db-journal
+*.db
+*.db-journal
 
 # Docker相关
 Dockerfile*
