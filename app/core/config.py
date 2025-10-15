@@ -14,6 +14,15 @@ class Settings(BaseSettings):
     
     # Authentication
     AUTH_TOKEN: Optional[str] = os.getenv("AUTH_TOKEN")
+    
+    # Z.AI Credentials for authenticated login
+    ZAI_EMAIL: Optional[str] = os.getenv("ZAI_EMAIL")
+    ZAI_PASSWORD: Optional[str] = os.getenv("ZAI_PASSWORD")
+    
+    # Captcha Configuration
+    CAPTCHA_SERVICE: str = os.getenv("CAPTCHA_SERVICE", "2captcha")
+    CAPTCHA_API_KEY: Optional[str] = os.getenv("CAPTCHA_API_KEY")
+    CAPTCHA_SITE_KEY: Optional[str] = os.getenv("CAPTCHA_SITE_KEY")
 
     # Token池配置
     TOKEN_FAILURE_THRESHOLD: int = int(os.getenv("TOKEN_FAILURE_THRESHOLD", "3"))  # 失败3次后标记为不可用

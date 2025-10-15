@@ -22,6 +22,7 @@ from app.models.schemas import OpenAIRequest, Message
 from app.core.config import settings
 from app.utils.logger import get_logger
 from app.utils.token_pool import get_token_pool
+from app.utils.captcha_solver import get_captcha_solver
 from app.core.zai_transformer import generate_uuid, get_zai_dynamic_headers
 from app.utils.sse_tool_handler import SSEToolHandler
 
@@ -120,9 +121,105 @@ class ZAIProvider(BaseProvider):
             settings.GLM46_SEARCH_MODEL,
         ]
     
+
+    async def login_with_credentials(self) -> str:
+        """使用邮箱和密码登录Z.AI获取认证令牌"""
+        if not settings.ZAI_EMAIL or not settings.ZAI_PASSWORD:
+            self.logger.warning("⚠️ ZAI_EMAIL 或 ZAI_PASSWORD 未配置")
+            return ""
+        
+        try:
+            login_url = f"{self.base_url}/api/v1/auths/signin"
+            headers = get_zai_dynamic_headers()
+            
+            # 登录请求数据
+            login_data = {
+                "email": settings.ZAI_EMAIL,
+                "password": settings.ZAI_PASSWORD
+            }
+            
+            # 如果配置了验证码服务，先解决验证码
+            if settings.CAPTCHA_API_KEY and settings.CAPTCHA_SITE_KEY:
+                self.logger.info(f"🔐 检测到验证码配置，正在解决验证码...")
+                captcha_solver = get_captcha_solver(
+                    service=settings.CAPTCHA_SERVICE,
+                    api_key=settings.CAPTCHA_API_KEY
+                )
+                
+                # 尝试不同类型的验证码
+                captcha_response = None
+                
+                # 1. 尝试 reCAPTCHA v2
+                captcha_response = await captcha_solver.solve_recaptcha_v2(
+                    site_key=settings.CAPTCHA_SITE_KEY,
+                    page_url="https://chat.z.ai/"
+                )
+                
+                # 2. 如果失败，尝试 hCaptcha
+                if not captcha_response:
+                    captcha_response = await captcha_solver.solve_hcaptcha(
+                        site_key=settings.CAPTCHA_SITE_KEY,
+                        page_url="https://chat.z.ai/"
+                    )
+                
+                # 3. 如果还失败，尝试 Cloudflare Turnstile
+                if not captcha_response:
+                    captcha_response = await captcha_solver.solve_cloudflare_turnstile(
+                        site_key=settings.CAPTCHA_SITE_KEY,
+                        page_url="https://chat.z.ai/"
+                    )
+                
+                if captcha_response:
+                    # 将验证码响应添加到登录数据中
+                    login_data["captcha"] = captcha_response
+                    self.logger.info(f"✅ 验证码解决成功")
+                else:
+                    self.logger.warning(f"⚠️ 验证码解决失败，尝试不带验证码登录...")
+            
+            self.logger.info(f"🔐 正在使用邮箱登录 Z.AI: {settings.ZAI_EMAIL}")
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    login_url,
+                    json=login_data,
+                    headers=headers,
+                    timeout=15.0
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    token = data.get("token", "")
+                    if token:
+                        email = data.get("email", settings.ZAI_EMAIL)
+                        user_id = data.get("id", "")
+                        self.logger.info(f"✅ 登录成功! 用户: {email}, ID: {user_id}")
+                        self.logger.debug(f"🎫 获取到认证令牌: {token[:30]}...")
+                        return token
+                    else:
+                        self.logger.error("❌ 登录响应中没有令牌")
+                        return ""
+                else:
+                    error_msg = response.text
+                    self.logger.error(f"❌ 登录失败 (HTTP {response.status_code}): {error_msg}")
+                    return ""
+                    
+        except Exception as e:
+            self.logger.error(f"❌ 登录过程出错: {e}")
+            import traceback
+            self.logger.debug(f"错误详情:\n{traceback.format_exc()}")
+            return ""
+
     async def get_token(self) -> str:
         """获取认证令牌"""
-        # 如果启用匿名模式，只尝试获取访客令牌
+        # 优先级1: 如果配置了邮箱和密码，尝试登录获取认证令牌
+        if settings.ZAI_EMAIL and settings.ZAI_PASSWORD:
+            self.logger.info("🔑 检测到 ZAI 凭据配置，尝试使用邮箱密码登录...")
+            token = await self.login_with_credentials()
+            if token:
+                return token
+            self.logger.warning("⚠️ 邮箱密码登录失败，尝试其他方式...")
+        
+        # 优先级2: 如果启用匿名模式，尝试获取访客令牌
         if settings.ANONYMOUS_MODE:
             try:
                 headers = get_zai_dynamic_headers()
@@ -145,7 +242,7 @@ class ZAIProvider(BaseProvider):
             self.logger.error("❌ 匿名模式下获取访客令牌失败")
             return ""
 
-        # 非匿名模式：首先使用token池获取备份令牌
+        # 优先级3: 非匿名模式：首先使用token池获取备份令牌
         token_pool = get_token_pool()
         if token_pool:
             token = token_pool.get_next_token()
@@ -153,7 +250,7 @@ class ZAIProvider(BaseProvider):
                 self.logger.debug(f"从token池获取令牌: {token[:20]}...")
                 return token
 
-        # 如果token池为空或没有可用token，使用配置的AUTH_TOKEN
+        # 优先级4: 如果token池为空或没有可用token，使用配置的AUTH_TOKEN
         if settings.AUTH_TOKEN and settings.AUTH_TOKEN != "sk-your-api-key":
             self.logger.debug(f"使用配置的AUTH_TOKEN")
             return settings.AUTH_TOKEN
