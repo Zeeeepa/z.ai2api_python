@@ -20,8 +20,12 @@ is_port_in_use() {
         nc -z localhost $port &> /dev/null
     else
         # Fallback: try to bind with Python
-        ./.venv/bin/python -c "import socket; s=socket.socket(); s.bind(('', $port)); s.close()" 2>/dev/null
-        return $?
+        # If bind succeeds, port is FREE (return 1), if it fails, port is IN USE (return 0)
+        if ./.venv/bin/python -c "import socket; s=socket.socket(); s.bind(('', $port)); s.close()" 2>/dev/null; then
+            return 1  # Port is free
+        else
+            return 0  # Port is in use
+        fi
     fi
 }
 
@@ -103,4 +107,3 @@ echo "❌ Error: Server failed to start within ${MAX_WAIT}s"
 echo "📋 Last 20 lines of server.log:"
 tail -20 server.log
 exit 4
-

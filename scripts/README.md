@@ -285,6 +285,27 @@ curl -X POST "http://localhost:$PORT/v1/chat/completions" \
 tail -50 server.log
 ```
 
+### Error: "Z.AI API 错误: 405" or "匿名模式下获取访客令牌失败"
+
+This error indicates that Z.AI's authentication API has changed or is temporarily unavailable.
+
+**Solutions:**
+
+1. **Use authenticated mode with credentials:**
+   ```bash
+   export ZAI_EMAIL="your-email@example.com"
+   export ZAI_PASSWORD="your-password"
+   bash scripts/start.sh
+   ```
+
+2. **Check Z.AI service status:**
+   - Visit https://chat.z.ai/ to verify the service is operational
+   - The anonymous token endpoint may have changed
+
+3. **Wait and retry:**
+   - Z.AI may be experiencing temporary issues
+   - The service typically recovers within a few minutes
+
 ---
 
 ## Environment Variables Reference
@@ -319,6 +340,18 @@ z.ai2api_python/
 ## Advanced Usage
 
 ### Run in Docker
+
+**Note:** A Dockerfile is not currently included in this repository. To run with Docker, you'll need to create a Dockerfile first. Example:
+
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY . .
+RUN pip install uv && uv venv && uv sync
+CMD ["bash", "scripts/start.sh"]
+```
+
+Then build and run:
 
 ```bash
 # Build image
@@ -382,4 +415,3 @@ When modifying scripts:
 ---
 
 **Made with ❤️ for simplified Z.AI proxy deployment**
-

@@ -36,7 +36,7 @@ AUTH_TOKEN=${AUTH_TOKEN:-"sk-any"}
 echo "📡 Request details:"
 echo "   URL: http://localhost:$SERVER_PORT/v1"
 echo "   Model: gpt-5"
-echo "   AUTH_TOKEN: $AUTH_TOKEN"
+echo "   AUTH_TOKEN: ${AUTH_TOKEN:0:8}... (masked for security)"
 echo ""
 
 # Create and run test script
@@ -92,4 +92,3 @@ else
     echo "❌ Test failed with exit code: $EXIT_CODE"
     exit $EXIT_CODE
 fi
-
