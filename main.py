@@ -51,7 +51,8 @@ async def lifespan(app: FastAPI):
 
 
 # Create FastAPI app with lifespan
-app = FastAPI(lifespan=lifespan)
+# root_path is used for reverse proxy path prefix (e.g., /api or /path-prefix)
+app = FastAPI(lifespan=lifespan, root_path=settings.ROOT_PATH)
 
 # Add CORS middleware
 app.add_middleware(
@@ -105,7 +106,7 @@ def run_server():
             interface="asgi",
             address="0.0.0.0",
             port=settings.LISTEN_PORT,
-            reload=True,  # 生产环境请关闭热重载
+            reload=False,  # 生产环境请关闭热重载
             process_name=service_name,  # 设置进程名称
             **RELOAD_CONFIG,    # 热重载配置
         ).serve()

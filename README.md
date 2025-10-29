@@ -18,6 +18,8 @@
 - 📊 **管理后台** - 实时监控、配置管理
 - 🔐 **安全认证** - 密码保护的管理后台访问
 
+❤️ 感谢各位的反馈推动项目改进！
+
 ## 🚀 快速开始
 
 ### 环境要求
@@ -58,50 +60,61 @@ uv run python main.py  # 或 python main.py
 
 ### Docker 部署
 
-#### 使用预构建镜像（推荐）
+从 Docker Hub 拉取镜像：
 
 ```bash
-# 拉取镜像
+# 拉取最新镜像
 docker pull zyphrzero/z-ai2api-python:latest
 
-# 快速启动
+# 快速启动（创建数据目录）
+mkdir -p data logs
+
+# 运行容器
 docker run -d \
-  --name z-ai2api \
+  --name z-ai-api-server \
   -p 8080:8080 \
-  -e AUTH_TOKEN="sk-your-api-key" \
-  -v $(pwd)/tokens.db:/app/tokens.db \
+  -e ADMIN_PASSWORD=admin123 \
+  -e AUTH_TOKEN=sk-your-api-key \
+  -e ANONYMOUS_MODE=true \
+  -e DB_PATH=/app/data/tokens.db \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  --restart unless-stopped \
   zyphrzero/z-ai2api-python:latest
-```
-
-#### 使用 Docker Compose
-
-创建 `docker-compose.yml`：
-
-```yaml
-version: '3.8'
-services:
-  z-ai2api:
-    image: zyphrzero/z-ai2api-python:latest
-    container_name: z-ai2api
-    ports:
-      - "8080:8080"
-    environment:
-      - AUTH_TOKEN=sk-your-api-key
-      - ANONYMOUS_MODE=true
-      - DEBUG_LOGGING=false
-      - TOOL_SUPPORT=true
-    volumes:
-      - ./tokens.db:/app/tokens.db
-    restart: unless-stopped
 ```
 
 启动服务：
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-> 💡 **数据持久化**：务必挂载 `tokens.db` 数据库文件以保存 Token 配置
+#### 方式二：本地构建
+
+```bash
+# 进入部署目录
+cd deploy
+
+# 启动服务（会自动构建镜像）
+docker compose up -d
+
+# 查看日志
+docker compose logs -f api-server
+```
+
+#### 数据持久化
+
+容器使用卷映射自动持久化数据：
+
+```
+data/                  # 数据库文件存储目录
+├── tokens.db          # SQLite 数据库（自动创建）
+logs/                  # 日志文件存储目录
+```
+
+数据在容器重启或重建后仍然保留，无需担心丢失。
+
+> 📖 **详细文档**：[Docker 部署指南](deploy/README_DOCKER.md)
 
 ## 📖 支持的模型
 
@@ -146,6 +159,7 @@ docker-compose up -d
 | `ANONYMOUS_MODE` | `true` | Z.AI 匿名模式 |
 | `TOOL_SUPPORT` | `true` | Function Call 开关 |
 | `SKIP_AUTH_TOKEN` | `false` | 跳过认证（仅开发） |
+| `DB_PATH` | `tokens.db` | 数据库文件路径（Docker: `/app/data/tokens.db`） |
 
 ### Token 配置
 
@@ -155,7 +169,7 @@ docker-compose up -d
 | `TOKEN_FAILURE_THRESHOLD` | Token 失败阈值（默认 3） |
 | `TOKEN_RECOVERY_TIMEOUT` | Token 恢复超时（默认 1800 秒） |
 
-> 💡 详细配置请参考 [.env.example](.env.example)
+> 💡 详细配置请参考 [.env.example](.env.example) 或 [deploy/.env.example](deploy/.env.example)
 
 ## 🔐 管理后台登录
 
@@ -221,7 +235,7 @@ http://localhost:8080/admin
 ## ❓ 常见问题
 
 ### Q: 如何获取 AUTH_TOKEN？
-A: `AUTH_TOKEN` 是自定义的 API 密钥，用于客户端访问本服务，需在 `.env` 文件中配置，确保客户端与服务端一致。
+A: `AUTH_TOKEN` 是自定义的 API 密钥，用于客户端访问本服务，需在 `.env` 文件或 `docker-compose.yml` 中配置，确保客户端与服务端一致。
 
 ### Q: 匿名模式是什么？
 A: 匿名模式使用临时 Token 访问 Z.AI，避免对话历史共享，保护隐私。设置 `ANONYMOUS_MODE=true` 启用。
@@ -230,7 +244,17 @@ A: 匿名模式使用临时 Token 访问 Z.AI，避免对话历史共享，保�
 A: 访问 Web 管理后台 http://localhost:8080/admin/tokens（需要先登录）即可增删改查 Token，支持批量导入导出。
 
 ### Q: 忘记管理后台密码怎么办？
-A: 在 `.env` 文件中修改 `ADMIN_PASSWORD` 为新密码，然后重启服务即可。
+A: 在 `.env` 文件或 `docker-compose.yml` 中修改 `ADMIN_PASSWORD` 为新密码，然后重启服务即可。
+
+### Q: Docker 部署时数据库初始化失败？
+A: 错误提示 `unable to open database file` 通常是权限问题。解决方案：
+```bash
+cd deploy
+mkdir -p ./data ./logs
+chmod 755 ./data ./logs
+docker compose down && docker compose up -d --build
+```
+详见 [Docker 部署指南](deploy/README_DOCKER.md#故障排查)
 
 ### Q: 如何禁用管理后台登录？
 A: 当前版本暂不支持禁用登录功能。如有需要，请手动移除路由中的 `dependencies=[Depends(require_auth)]`。

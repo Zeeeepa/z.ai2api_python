@@ -21,24 +21,24 @@ def setup_logger(log_dir, log_retention_days=7, log_rotation="1 day", debug_mode
     """
     global app_logger
 
-    try:
-        # 移除所有现有的日志处理器（支持热重载）
-        logger.remove()
+    # 移除所有现有的日志处理器（支持热重载）
+    logger.remove()
 
-        log_level = "DEBUG" if debug_mode else "INFO"
+    log_level = "DEBUG" if debug_mode else "INFO"
 
-        console_format = (
-            "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"
-            if not debug_mode
-            else "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | "
-            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>"
-        )
+    console_format = (
+        "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"
+        if not debug_mode
+        else "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | "
+        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>"
+    )
 
-        # 添加控制台输出（根据 debug_mode 设置级别）
-        logger.add(sys.stderr, level=log_level, format=console_format, colorize=True)
+    # 添加控制台输出（根据 debug_mode 设置级别）
+    logger.add(sys.stderr, level=log_level, format=console_format, colorize=True)
 
-        # 只有在 debug_mode 时才添加文件输出
-        if debug_mode:
+    # 只有在 debug_mode 时才添加文件输出
+    if debug_mode:
+        try:
             log_path = Path(log_dir)
             log_path.mkdir(parents=True, exist_ok=True)
 
@@ -56,16 +56,13 @@ def setup_logger(log_dir, log_retention_days=7, log_rotation="1 day", debug_mode
                 enqueue=True,
                 catch=True,
             )
+        except (PermissionError, OSError) as e:
+            # 如果无法创建日志目录或文件，降级为仅控制台输出
+            logger.warning(f"⚠️ 无法创建日志文件 ({e})，将仅使用控制台输出")
 
-        app_logger = logger
+    app_logger = logger
 
-        return logger
-
-    except Exception as e:
-        logger.remove()
-        logger.add(sys.stderr, level="ERROR")
-        logger.error(f"日志系统配置失败: {e}")
-        raise
+    return logger
 
 
 def get_logger():

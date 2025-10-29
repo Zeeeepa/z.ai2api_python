@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   api-server:
     build:
@@ -7,41 +5,31 @@ services:
       dockerfile: deploy/Dockerfile
     container_name: z-ai-api-server
     ports:
-      - "${LISTEN_PORT:-8080}:8080"
+      - "8080:8080"
     volumes:
-      # 持久化数据库 (自动生成)
-      - ./data/tokens.db:/app/tokens.db
-      # 持久化日志（可选）
-      - ./data/logs:/app/logs
-    env_file:
-      # 从 .env.docker 文件读取配置（如果存在）
-      - .env.docker
+      # 数据库持久化存储
+      - ./data:/app/data
+      # 日志持久化存储(可选)
+      - ./logs:/app/logs
     environment:
-      # 管理后台登录密码（⚠️ 强烈建议修改）
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
-      # 客户端 API 密钥
-      - AUTH_TOKEN=${AUTH_TOKEN:-sk-your-api-key}
-      # 是否跳过 API 认证
-      - SKIP_AUTH_TOKEN=${SKIP_AUTH_TOKEN:-false}
+      - ADMIN_PASSWORD=admin123
+      # Auth Configuration
+      - AUTH_TOKEN=sk-your-api-key
+      # 是否跳过api key验证
+      - SKIP_AUTH_TOKEN=false
       # 调试日志
-      - DEBUG_LOGGING=${DEBUG_LOGGING:-false}
+      - DEBUG_LOGGING=true
       # 匿名模式
-      - ANONYMOUS_MODE=${ANONYMOUS_MODE:-true}
+      - ANONYMOUS_MODE=true
       # Function Call 功能开关
-      - TOOL_SUPPORT=${TOOL_SUPPORT:-true}
-      # 工具调用扫描限制（字符数）
-      - SCAN_LIMIT=${SCAN_LIMIT:-200000}
-      # Token 池配置
-      - TOKEN_FAILURE_THRESHOLD=${TOKEN_FAILURE_THRESHOLD:-3}
-      - TOKEN_RECOVERY_TIMEOUT=${TOKEN_RECOVERY_TIMEOUT:-1800}
-      # 默认提供商
-      - DEFAULT_PROVIDER=${DEFAULT_PROVIDER:-zai}
-      # Session 密钥
-      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:-your-secret-key-change-in-production}
+      - TOOL_SUPPORT=true
+      # 工具调用扫描限制(字符数)
+      - SCAN_LIMIT=200000
+      # 数据库路径 - 使用持久化卷
+      - DB_PATH=/app/data/tokens.db
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/models"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s

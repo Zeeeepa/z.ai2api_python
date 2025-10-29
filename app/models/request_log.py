@@ -3,8 +3,10 @@
 用于存储API请求的详细记录
 """
 
-# 数据库路径
-DB_PATH = "tokens.db"  # 复用 tokens 数据库
+import os
+
+# 数据库路径 - 支持环境变量配置
+DB_PATH = os.getenv("DB_PATH", "tokens.db")  # 复用 tokens 数据库
 
 # 创建请求日志表的SQL
 SQL_CREATE_REQUEST_LOGS_TABLE = """

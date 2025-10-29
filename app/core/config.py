@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     LISTEN_PORT: int = int(os.getenv("LISTEN_PORT", "8080"))
     DEBUG_LOGGING: bool = os.getenv("DEBUG_LOGGING", "true").lower() == "true"
     SERVICE_NAME: str = os.getenv("SERVICE_NAME", "z-ai2api-server")
+    ROOT_PATH: str = os.getenv("ROOT_PATH", "")  # For Nginx reverse proxy path prefix, e.g., "/api" or "/path-prefix"
 
     ANONYMOUS_MODE: bool = os.getenv("ANONYMOUS_MODE", "true").lower() == "true"
     TOOL_SUPPORT: bool = os.getenv("TOOL_SUPPORT", "true").lower() == "true"
@@ -69,22 +70,14 @@ class Settings(BaseSettings):
     # Provider Configuration
     DEFAULT_PROVIDER: str = os.getenv("DEFAULT_PROVIDER", "zai")  # 默认提供商：zai/k2think/longcat
 
+    # Proxy Configuration
+    HTTP_PROXY: Optional[str] = os.getenv("HTTP_PROXY")  # HTTP代理,格式: http://user:pass@host:port 或 http://host:port
+    HTTPS_PROXY: Optional[str] = os.getenv("HTTPS_PROXY")  # HTTPS代理,格式同上
+    SOCKS5_PROXY: Optional[str] = os.getenv("SOCKS5_PROXY")  # SOCKS5代理,格式: socks5://user:pass@host:port
+
     # Admin Panel Authentication
     ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")  # 管理后台密码
     SESSION_SECRET_KEY: str = os.getenv("SESSION_SECRET_KEY", "your-secret-key-change-in-production")  # Session 密钥
-
-    # Browser Headers
-    CLIENT_HEADERS: Dict[str, str] = {
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 Edg/139.0.0.0",
-        "Accept-Language": "zh-CN",
-        "sec-ch-ua": '"Not;A=Brand";v="99", "Microsoft Edge";v="139", "Chromium";v="139"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"Windows"',
-        "X-FE-Version": "prod-fe-1.0.98",
-        "Origin": "https://chat.z.ai",
-    }
 
     class Config:
         env_file = ".env"
